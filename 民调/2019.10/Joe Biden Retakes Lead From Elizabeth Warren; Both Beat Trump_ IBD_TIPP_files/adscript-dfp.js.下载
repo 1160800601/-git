@@ -1,0 +1,1154 @@
+/* globals GetPostCategories, InvestorsAdvertisingDfpSettings, InvestorsAdvertisingSettings, dfpResponsive,
+		   userSubType, userAdRoles, GetAdVariable, GetAdKeywords */
+/* exported displaySponsorshipText */
+/* jscs:disable requireVarDeclFirst, requireCapitalizedComments */
+/* eslint-disable strict, no-magic-numbers, complexity, consistent-this, one-var, max-depth, max-nested-callbacks, no-param-reassign */
+var dfpWindowProcessed = false,
+	displaySponsorshipText = false;
+
+window.dfptag = window.dfptag || {};
+window.dfptag.cmd = window.dfptag.cmd || [];
+
+(function( $, window, dfpSettings, generalSettings ) {
+	'use strict';
+	var self = this,
+		dfpID = '', // Default is 4824
+		testTag,
+		count = 0,
+		uid = 0,
+		rendered = 0,
+		dfpSelector = '.adunit',
+		dfpOptions = {},
+		dfpIsLoaded = false,
+		$adCollection,
+		storeAs = 'googleAdUnit',
+		valueMaxLength = 40,
+		init = function( id, selector, options ) {
+			dfpID = id;
+			$adCollection = $( selector );
+			dfpLoader();
+			setOptions( options );
+			createAds();
+			displayAds();
+		},
+		setOptions = function( options ) {
+			dfpOptions = {
+				setTargeting: {},
+				setCategoryExclusion: '',
+				setLocation: '',
+				enableSingleRequest: true,
+				collapseEmptyDivs: 'original',
+				refreshExisting: true,
+				disablePublisherConsole: false,
+				disableInitialLoad: false,
+				noFetch: false,
+				namespace: undefined,
+				lazyLoad: 'undefined' !== typeof dfpSettings && 'undefined' !== typeof dfpSettings.lazyLoadOnOff ? '' === dfpSettings.lazyLoadOnOff || 'On' === dfpSettings.lazyLoadOnOff : true
+			};
+			$.extend( true, dfpOptions, options );
+			if ( dfpOptions.googletag ) {
+				window.googletag.cmd.push(function() {
+					$.extend( true, window.googletag, dfpOptions.googletag );
+				});
+			}
+		},
+		createAds = function() {
+			$adCollection.each(function() {
+				var $adUnit = $( this ),
+					adUnitName,
+					adUnitID,
+					dimensions = [],
+					adPosition = '',
+					adSponsorSel = '',
+					presetTargeting = {},
+					displaySponsorText = false,
+					info;
+
+				if ( dfpOptions.lazyLoad && ! dfpLazyLoad.isAdVisible( $adUnit ) ) {
+					return;
+				}
+
+				count++;
+				dfpLazyLoad.markAdCreated( $adUnit );
+
+				adUnitName = getName( $adUnit );
+				adUnitID = getID( $adUnit, adUnitName );
+				adPosition = $adUnit.data( 'adposition' );
+				adSponsorSel = $adUnit.data( 'adsponsorsel' );
+
+				if ( adPosition && adPosition.length > 0 ) {
+					info = GetAdSlotInfo( adPosition, $adUnit );
+					if ( info.Slot.length > 0 ) {
+						adUnitName = info.Slot;
+						dimensions = info.Sizes;
+						displaySponsorText = info.DisplaySponsorText;
+						presetTargeting.pos = info.Position;
+						if ( info.Section.length > 0 ) {
+							presetTargeting.sect = info.Section;
+						}
+					} else {
+						$adUnit.addClass( 'display-noslot' );
+						count--;
+						return;
+					}
+				}
+
+				$adUnit.data( 'existingContent', $adUnit.html() );
+				$adUnit.html( '' ).addClass( 'display-none' );
+				window.googletag.cmd.push(function() {
+					var googleAdUnit,
+						$adUnitData = $adUnit.data( storeAs ),
+						exclusionsGroup,
+						valueTrimmed,
+						targeting = {},
+						map,
+						exclusions;
+
+					if ( $adUnitData ) {
+						googleAdUnit = $adUnitData;
+					} else if ( $adUnit.data( 'outofpage' ) ) {
+						googleAdUnit = window.googletag.defineOutOfPageSlot( adUnitName, adUnitID ).addService( window.googletag.pubads() );
+					} else if ( $adUnit.data( 'companion' ) ) {
+						googleAdUnit = window.googletag.defineSlot( adUnitName, dimensions, adUnitID ).addService( window.googletag.companionAds() ).addService( window.googletag.pubads() );
+					} else {
+						googleAdUnit = window.googletag.defineSlot( adUnitName, dimensions, adUnitID ).addService( window.googletag.pubads() );
+					}
+
+					// Slot Level Targeting, the ones defined in the element directly will override all.
+					$.extend( true, targeting, presetTargeting, $adUnit.data( 'targeting' ) );
+
+					if ( targeting ) {
+						$.each( targeting, function( k, v ) {
+							if ( v.length > valueMaxLength ) {
+								v = v.substring( 0, valueMaxLength );
+							}
+							googleAdUnit.setTargeting( k, v.toString() );
+						});
+					}
+					exclusions = $adUnit.data( 'exclusions' );
+					if ( exclusions ) {
+						exclusionsGroup = exclusions.split( ',' );
+						$.each( exclusionsGroup, function( k, v ) {
+							valueTrimmed = $.trim( v );
+							if ( valueTrimmed.length > 0 ) {
+								googleAdUnit.setCategoryExclusion( valueTrimmed );
+							}
+						});
+					}
+
+					map = window.googletag.sizeMapping();
+
+					// Use AdUnits config file to do the size mapping.
+					if ( window.dfpAdUnits.hasOwnProperty( dfpSettings.pageType ) && window.dfpAdUnits[dfpSettings.pageType].hasOwnProperty( adPosition ) ) {
+						$.each( window.dfpAdUnits[dfpSettings.pageType][adPosition].sizes, function( k, v ) {
+							map.addSize( v[0], v[1] );
+						});
+						googleAdUnit.defineSizeMapping( map.build() );
+					}
+
+					if ( ! displaySponsorText && adSponsorSel && adSponsorSel.length > 0 ) {
+						$( adSponsorSel ).html( '&nbsp;' ).css( 'width', '75px' );
+					}
+					$adUnit.data( storeAs, googleAdUnit );
+					if ( 'function' === typeof dfpOptions.beforeEachAdLoaded ) {
+						dfpOptions.beforeEachAdLoaded.call( this, $adUnit );
+					}
+
+					// Trigger a custom event when an ad slot is defined.
+					$( window ).trigger( 'googletag.ads.slotDefined', googleAdUnit );
+				});
+			});
+			if ( 'function' === typeof dfpOptions.beforeAllAdsLoaded ) {
+				dfpOptions.beforeAllAdsLoaded.call( this, $adCollection );
+			}
+			window.googletag.cmd.push(function() {
+				if ( dfpOptions.enableSingleRequest ) {
+					window.googletag.pubads().enableSingleRequest();
+				}
+
+				// Page Level targeting.
+				$.each( dfpOptions.setTargeting, function( k, v ) {
+					if ( v.length > valueMaxLength ) {
+						v = v.substring( 0, valueMaxLength );
+					}
+
+					// When param type not match, data won't be overrided.
+					window.googletag.pubads().setTargeting( k, v.toString() );
+				});
+				if ( testTag ) {
+					window.googletag.pubads().setTargeting( 'test', testTag );
+				}
+
+				if ( 'object' === typeof dfpOptions.setLocation ) {
+					if ( 'number' === typeof dfpOptions.setLocation.latitude && 'number' === typeof dfpOptions.setLocation.longitude && 'number' === typeof dfpOptions.setLocation.precision ) {
+						window.googletag.pubads().setLocation( dfpOptions.setLocation.latitude, dfpOptions.setLocation.longitude, dfpOptions.setLocation.precision );
+					} else if ( 'number' === typeof dfpOptions.setLocation.latitude && 'number' === typeof dfpOptions.setLocation.longitude ) {
+						window.googletag.pubads().setLocation( dfpOptions.setLocation.latitude, dfpOptions.setLocation.longitude );
+					}
+				}
+				if ( dfpOptions.setCategoryExclusion.length > 0 ) {
+					var exclusionsGroup = dfpOptions.setCategoryExclusion.split( ',' ),
+						valueTrimmed;
+					$.each( exclusionsGroup, function( k, v ) {
+						valueTrimmed = $.trim( v );
+						if ( valueTrimmed.length > 0 ) {
+							window.googletag.pubads().setCategoryExclusion( valueTrimmed );
+						}
+					});
+				}
+				if ( dfpOptions.collapseEmptyDivs ) {
+					window.googletag.pubads().collapseEmptyDivs();
+				}
+				if ( dfpOptions.disablePublisherConsole ) {
+					window.googletag.pubads().disablePublisherConsole();
+				}
+				if ( dfpOptions.companionAds ) {
+					window.googletag.companionAds().setRefreshUnfilledSlots( true );
+					if ( ! dfpOptions.disableInitialLoad ) {
+						window.googletag.pubads().enableVideoAds();
+					}
+				}
+				if ( dfpOptions.disableInitialLoad ) {
+					window.googletag.pubads().disableInitialLoad();
+				}
+				if ( dfpOptions.noFetch ) {
+					window.googletag.pubads().noFetch();
+				}
+				window.googletag.enableServices();
+			});
+		},
+		displayAds = function() {
+			$adCollection.each(function() {
+				var $adUnit = $( this ),
+					$adUnitData = $adUnit.data( storeAs );
+
+				if ( ! $adUnit[0].hasAttribute( 'id' ) ) {
+					return;
+				}
+				if ( $adUnit.hasClass( 'display-noslot' ) ) {
+					return;
+				}
+				if ( dfpOptions.refreshExisting && $adUnitData && $adUnit.hasClass( 'display-block' ) ) {
+					window.googletag.cmd.push(function() {
+						window.googletag.pubads().refresh([$adUnitData]);
+					});
+				} else {
+
+					// Only display the ads when ID assigned.
+					window.googletag.cmd.push(function() {
+						window.googletag.display( $adUnit.attr( 'id' ) );
+					});
+				}
+			});
+		},
+		getID = function( $adUnit, adUnitName ) {
+			if ( $adUnit[0].hasAttribute( 'id' ) ) {
+				return $adUnit.attr( 'id' );
+			}
+
+			uid++;
+			return $adUnit.attr( 'id', adUnitName.replace( /[^A-z0-9]/g, '_' ) + '-auto-gen-id-' + uid ).attr( 'id' );
+		},
+		getName = function( $adUnit ) {
+			var adUnitName = $adUnit.data( 'adunit' ) || dfpOptions.namespace || $adUnit.attr( 'id' ) || '';
+			if ( 'function' === typeof dfpOptions.alterAdUnitName ) {
+				adUnitName = dfpOptions.alterAdUnitName.call( this, adUnitName, $adUnit );
+			}
+			return adUnitName;
+		},
+		dfpLoader = function() {
+			dfpIsLoaded = dfpIsLoaded || $( 'script[src*="googletagservices.com/tag/js/gpt.js"]' ).length;
+			if ( dfpIsLoaded ) {
+				if ( console ) {
+					console.log( 'dfp script loaded' );
+				}
+				return;
+			}
+			window.googletag = window.googletag || {};
+			window.googletag.cmd = window.googletag.cmd || [];
+			var gads = document.createElement( 'script' ),
+				useSSL = 'https:' === document.location.protocol,
+				node = document.getElementsByTagName( 'script' )[0];
+
+			gads.async = true;
+			gads.type = 'text/javascript';
+			gads.onerror = function() {
+				if ( console ) {
+					console.log( 'dfp script blocked in onerror' );
+				}
+				dfpBlocked();
+			};
+			gads.src = ( useSSL ? 'https:' : 'http:' ) + '//www.googletagservices.com/tag/js/gpt.js';
+			node.parentNode.insertBefore( gads, node );
+
+			// Register Event Listener only once.
+			window.googletag.cmd.push( function() {
+				window.googletag.pubads().addEventListener( 'slotRenderEnded', function( event ) {
+					var $adUnit = $( '#' + event.slot.getSlotId().getDomId() ),
+						display = event.isEmpty ? 'none' : 'block',
+						$existingContent = $adUnit.data( 'existingContent' ),
+						func;
+
+					rendered++;
+
+					console.log( 'render ad content for #' + event.slot.getSlotId().getDomId() + ' and the display is ' + display );
+
+					// Emit event.
+					$( window ).trigger( 'googletag.ads.slotRenderEnded', [ event, $adUnit ] );
+
+					if ( 'none' === display && $.trim( $existingContent ).length > 0 && 'original' === dfpOptions.collapseEmptyDivs ) {
+						$adUnit.show().html( $existingContent );
+						display = 'block display-original';
+					}
+					$adUnit.removeClass( 'display-none' ).addClass( 'display-' + display );
+					if ( 'function' === typeof dfpOptions.afterEachAdLoaded ) {
+						dfpOptions.afterEachAdLoaded.call( this, $adUnit );
+					}
+					if ( rendered === count && 'function' === typeof dfpOptions.afterAllAdsLoaded ) {
+						dfpOptions.afterAllAdsLoaded.call( this, $adCollection );
+					}
+					if ( rendered === count && window.dfptag && window.dfptag.cmd && window.dfptag.cmd.length > 0 ) {
+						while ( window.dfptag.cmd.length > 0 ) {
+							func = window.dfptag.cmd.pop();
+							func();
+						}
+					}
+				});
+			});
+
+			if ( console ) {
+				console.log( 'dfp script tag added to dom' );
+			}
+			if ( 'none' === gads.style.display ) {
+				if ( console ) {
+					console.log( 'dfp script blocked in hide' );
+				}
+				dfpBlocked();
+			}
+
+			// Test tag for targeting.
+			if ( dfpSettings.testTagKey ) {
+				testTag = ( new window.URLSearchParams( window.location.search ) ).get( dfpSettings.testTagKey );
+			}
+		},
+		dfpBlocked = function() {
+			var commands = window.googletag.cmd;
+			setTimeout(function() {
+				var _defineSlot = function( name, dimensions, id ) {
+					window.googletag.ads.push( id );
+					window.googletag.ads[id] = {
+						renderEnded: function() {},
+						addService: function() {
+							return this;
+						}
+					};
+					return window.googletag.ads[id];
+				};
+				window.googletag = {
+					cmd: {
+						push: function( callback ) {
+							callback.call( self );
+						}
+					},
+					ads: [],
+					pubads: function() {
+						return this;
+					},
+					noFetch: function() {
+						return this;
+					},
+					disableInitialLoad: function() {
+						return this;
+					},
+					disablePublisherConsole: function() {
+						return this;
+					},
+					enableSingleRequest: function() {
+						return this;
+					},
+					setTargeting: function() {
+						return this;
+					},
+					collapseEmptyDivs: function() {
+						return this;
+					},
+					enableServices: function() {
+						return this;
+					},
+					defineSlot: function( name, dimensions, id ) {
+						return _defineSlot( name, dimensions, id );
+					},
+					defineOutOfPageSlot: function( name, id ) {
+						return _defineSlot( name, [], id );
+					},
+					display: function( id ) {
+						window.googletag.ads[id].renderEnded.call( self );
+						return this;
+					}
+				};
+				$.each( commands, function( k, v ) {
+					window.googletag.cmd.push( v );
+				});
+			}, 50 );
+		},
+		/* Dfp lazy load that handles lazy load of ads and refresh of currently in view ads */
+		dfpLazyLoad = ( function() {
+			var adUnitSelector = '.adunit',
+				adUnitCreated = 'adcreated',
+				adUnitStoreAs = 'googleAdUnit',
+				adRefreshInterval = 0,
+				log = function( msg ) {
+					if ( console && console.log ) {
+						console.log( 'DFP Lazy Load: ' + msg );
+					}
+				},
+				isAdVisible = function( element ) {
+					var isVisible = true;
+					if ( ! window.InvestorsUtils.InViewDetection.isElementInView( element ) ) {
+						return false;
+					}
+					if ( ! element.is( ':visible' ) && 0 === element.height() && 0 === element.width() ) {
+						element.css( 'width', '1px' );
+			            isVisible = element.is( ':visible' );
+			            element.css( 'width', '' );
+			        }
+					return isVisible;
+				},
+				/**
+				 * Detect current page / tab is active viewing
+				 * This function is important to detect whether the current tab is active or in the background.
+				 * By checking this, ads won't be refreshed if the tab is not active for view.
+				 *
+				 * @returns {boolean} Is active or not.
+				 */
+				isPageVisible = function() {
+					var checkEnabled = 'undefined' !== typeof dfpSettings && 'undefined' !== typeof dfpSettings.browserDetectOnOff ? '' === dfpSettings.browserDetectOnOff || 'On' === dfpSettings.browserDetectOnOff : true,
+						hidden = 'hidden';
+					if ( checkEnabled ) {
+						if ( 'undefined' !== typeof document.hidden  ) {
+							hidden = 'hidden';
+						} else if ( 'undefined' !== typeof document.mozHidden  ) {
+							hidden = 'mozHidden';
+						} else if ( 'undefined' !== typeof document.msHidden  ) {
+							hidden = 'msHidden';
+						} else if ( 'undefined' !== typeof document.webkitHidden ) {
+							hidden = 'webkitHidden';
+						}
+						return ! document[hidden];
+					}
+					return true;
+				},
+				processAdsInViewOnRefresh = function() {
+					var adSlots = [],
+						adPositions = [],
+						pageVisible = isPageVisible();
+
+					log( 'refresh activated, page visible: ' + pageVisible );
+
+					if ( pageVisible ) {
+						$( adUnitSelector ).each(function() {
+							var $adUnitInView = $( this ),
+								$adUnitData = '';
+
+							if ( $adUnitInView.data( adUnitCreated ) && isAdVisible( $adUnitInView ) ) {
+
+								// Ad has been created and in view
+								$adUnitData = $adUnitInView.data( adUnitStoreAs );
+
+								// No slot defined so don't attempt to show
+								if ( $adUnitInView.hasClass( 'display-noslot' ) ) {
+									return;
+								}
+
+								if ( $adUnitData && $adUnitInView.hasClass( 'display-block' ) ) {
+									adPositions.push( $adUnitInView.data( 'adposition' ) );
+									adSlots.push( $adUnitData );
+								}
+							}
+						});
+
+						if ( adSlots.length > 0 ) {
+							log( 'refreshing ' + adSlots.length + ' ad' + ( 1 === adSlots.length ? '' : 's' ) + ' (' + adPositions.join( ', ' ) + ')' );
+							window.googletag.cmd.push(function() {
+								window.googletag.pubads().refresh( adSlots );
+							});
+						}
+					}
+				},
+				processAdsInView = function() {
+					$( adUnitSelector ).each(function() {
+						var $adUnitInView = $( this ),
+							targeting = {};
+
+						if ( ! $adUnitInView.data( adUnitCreated ) && isAdVisible( $adUnitInView ) ) {
+							log( '[ad create]: ' + $adUnitInView.data( 'adposition' ) );
+							targeting = GetDFPCommonTargeting( $adUnitInView );
+
+							// Override page targeting values.
+							$.extend( true, targeting, $adUnitInView.data( 'page-targeting' ) );
+							$adUnitInView.dfp({
+								dfpID: dfpSettings.IBDdfpID,
+								setTargeting: targeting,
+								collapseEmptyDivs: true,
+								afterEachAdLoaded: function( $adUnitProp ) {
+									if ( 'tc1' === $adUnitProp.data( 'adposition' ) && $adUnitProp.hasClass( 'display-block' ) ) {
+										$( '#tradingh,#tradingv' ).show();
+									}
+								}
+							});
+						}
+					});
+				};
+
+			return {
+				init: function() {
+					log( 'initializing' );
+					$( '.mobile-icon-nav' ).on( 'click', processAdsInView );
+					$( window ).on( 'scroll.dfplazy resize.dfplazy lookup.dfplazy', processAdsInView );
+					adRefreshInterval = 'undefined' !== typeof dfpSettings ? parseInt( dfpSettings.refreshRate, 10 ) * 1000 : 0;
+
+					if ( adRefreshInterval > 0 ) {
+						log( 'refresh rate: ' + adRefreshInterval );
+						setInterval( processAdsInViewOnRefresh, adRefreshInterval );
+					} else {
+						log( 'refresh rate not found/set' );
+					}
+				},
+				isAdVisible: function( $adUnit ) {
+					return isAdVisible( $adUnit );
+				},
+				markAdCreated: function( $adUnit ) {
+					$adUnit.data( adUnitCreated, true );
+				}
+			};
+		})(),
+		InvestorsAdvertisingDFP = {
+			injectTabletAds: function() {
+				$( '.responsive-rec-one' ).replaceWith( '<div class="adunit rtPaidAd responsive-rec-one recSticky" data-adposition="rec1"></div>' );
+				$( '.responsive-rec-two' ).replaceWith( '<div class="adunit rtPaidAd responsive-rec-two recSticky" data-adposition="rec2"></div>' );
+				$( '.responsive-rec-three' ).replaceWith( '<div class="adunit responsive-rec-three" data-adposition="rec3"></div>' );
+				$( '.responsive-house-ad' ).replaceWith( '<div class="ads house ad-space adunit responsive-house-ad" data-adposition="promo"></div>' );
+				$( '.adunit-mobile-rec1' ).show().data( 'adposition', 'rec1' ).addClass( 'adunit' );
+				$( '.adunit-sponsorbtn2' ).hide();
+			},
+			injectDesktopAds: function() {
+				$( '.responsive-rec-one' ).replaceWith( '<div class="adunit rtPaidAd responsive-rec-one recSticky" data-adposition="rec1"></div>' );
+				$( '.responsive-rec-two' ).replaceWith( '<div class="adunit rtPaidAd responsive-rec-two recSticky" data-adposition="rec2"></div>' );
+				$( '.responsive-rec-three' ).replaceWith( '<div class="adunit responsive-rec-three" data-adposition="rec3"></div>' );
+				$( '.responsive-house-ad' ).replaceWith( '<div class="ads house ad-space adunit responsive-house-ad" data-adposition="promo"></div>' );
+				$( '.market-trend-leader' ).attr( 'data-adposition', 'mid1' );
+				$( '.adunit-mobile-rec1' ).hide();
+				$( '.adunit-sponsorbtn2' ).show().find( '.desktop-ad' ).addClass( 'adunit' );
+			},
+			/**
+			 * Inject DFP Ads for each page
+			 */
+			routing: {
+				'common': {
+					'init': function() {
+
+						// Welcome Ad Page
+						if ( $( window ).width() > 640 ) {
+							try {
+
+								//check if cookie exists, if not make it
+								window.InvestorsUtils.Cookie.checkPersistentCountingCookie( 'welcome_ad_count', parseInt( generalSettings.welcomeAdExpiration, 10 ) );
+
+								var excludeWPDir = ['product', 'ibd-store'];
+								var excludeNETDom = ['shop'];
+								var wpStore = window.location.pathname.split( '/' )[1];
+								var netStore = window.location.host.split( '.' )[0];
+
+								//ignore certain pages
+								if ( ! ( $.inArray( wpStore, excludeWPDir ) > -1 || $.inArray( netStore, excludeNETDom ) > -1 ) ) {
+									window.InvestorsUtils.Cookie.incrementPersistentCountingCookie( 'welcome_ad_count', parseInt( generalSettings.welcomeAdExpiration, 10 ) );
+
+									//if you have visited enough pages, show add
+									if ( window.InvestorsUtils.Cookie.checkPersistentCountingCookie( 'welcome_ad_count', parseInt( generalSettings.welcomeAdExpiration, 10 ) ) === parseInt( generalSettings.welcomeAdPageCounter, 10 ) ) { //number needs to be curated by wp
+										var adSlot = GetAdSlotInfo( 'intropage' );
+										if ( adSlot.Slot.length > 0 ) {
+											var modalContent = $( '#interstitial-overlay-content' ),
+												modalContentContainer = $( '.welcome-ad-content' ),
+												modal = $( '.welcome-ad' );
+
+											// clear content
+											modalContent.empty();
+
+											// put content of ad into this jquery object
+											window.dfptag.cmd.push(function() {
+
+												//ad content
+												CreateAndAppendAd( modalContent, 'interstitial_intropage', 'intropage', function() {
+													if ( $( '#interstitial_intropage' ).hasClass( 'display-block' ) ) {
+
+														// show overlay
+														if ( 0 === $( '.reveal-modal-bg' ).length ) {
+															$( 'body' ).append( '<div class="reveal-modal-bg" style="display: none;"></div>' );
+														}
+														$( '.reveal-modal-bg' ).on( 'click.welcome', function() {
+															$( this ).fadeOut().off( 'click.welcome' );
+															modal.removeClass( 'open' );
+														}).fadeIn();
+														modal.addClass( 'open' );
+
+														// set auto close timer
+														if ( parseInt( generalSettings.welcomeAdCloseTimer, 10 ) > 0 ) {
+															setTimeout(function() {
+																$( '.reveal-modal-bg' ).fadeOut().off( 'click.welcome' );
+																modal.removeClass( 'open' );
+															}, parseInt( generalSettings.welcomeAdCloseTimer, 10 ) );
+														}
+
+														// set close button timer
+														if ( parseInt( generalSettings.welcomeAdCloseButtonTimer, 10 ) > 0 ) {
+															setTimeout(function() {
+																$( '<span class="close-welcome-ad" id="close-welcome-ad">Close</span>' ).insertAfter( modalContentContainer );
+																$( '#close-welcome-ad' ).on( 'click', function() {
+																	$( '.reveal-modal-bg' ).fadeOut().off( 'click.welcome' );
+																	modal.removeClass( 'open' );
+																});
+															}, parseInt( generalSettings.welcomeAdCloseButtonTimer, 10 ) );
+														}
+													}
+												});
+											});
+										} else {
+											window.setCookie( 'welcome_ad_count', 0, 1 );
+										}
+									}
+								}
+							} catch ( e ) {
+								console.log( 'Issue involving InvestorsAdvertisingSettings in "common" portion of main.js' );
+								console.log( 'error: ' + e );
+							}
+						}
+
+						// Injecting sponsor button (except for homepage).
+						if ( $( window ).width() > 1024 && ! $( 'body' ).hasClass( 'wp-home' ) ) {
+							$( '.desktop-nav-ad-container' ).append( '<div class="adunit desktop-nav-ad" data-adposition="sponsorbtn1"></div>' );
+						}
+
+						// Page Builder Ad Injection Script (page-landing)
+						var modules = $( '.modules-container' ).find( '.module' ),
+							numOfModules = modules.length,
+							secondModule = modules.eq( 1 ),
+							sixthModule = modules.eq( 5 );
+						if ( $( window ).width() <= 768 ) {
+
+							// Append ads to page builder pages that have
+							// more than three modules on them
+							if ( parseInt( numOfModules, 10 ) >= 3 ) {
+								$( '<div class="adunit responsive-rec-one" data-adposition="rec1"></div>' ).insertAfter( secondModule );
+							}
+
+							// Append ads to page builder pages that have
+							// more than six modules on them
+							if ( parseInt( numOfModules, 10 ) > 6 ) {
+								$( '<div class="adunit responsive-rec-two" data-adposition="rec2"></div>' ).insertAfter( sixthModule );
+							}
+						}
+
+						// Add ads with js not php for cache
+						if ( $( window ).width() > 1023 && ! window.InvestorsUtils.isContinuousScrollEnabled() ) {
+							$( 'div.sidebar-ad-placeholder-rec1' ).replaceWith( '<div class="ads sidebar-ad rec-one"><div class="adunit responsive-rec-one" data-adposition="rec1"></div></div>' );
+							$( 'div.sidebar-ad-placeholder' ).replaceWith( '<div class="ads sidebar-ad sidebar-housetop-ad"><div class="adunit responsive-house-top" data-adposition="housetop"></div></div>' );
+						}
+
+						// Header is on all pages but homepage and store pages
+						if ( ! $( 'body' ).hasClass( 'wp-home' ) && ! $( 'body' ).hasClass( 'ibd-store' ) && ! $( 'body' ).hasClass( 'single-product_type' ) ) {
+							var headerHTML = '<div class="row"><div class="ads site-header-ad pushdown-ad leaderboard-ad text-center"><div id="desktop-leader" class="ads adunit" data-adposition="leader"></div></div></div>';
+
+							// Mobile check and ipad check.
+							if ( $( window ).width() < 1007 ) {
+				                headerHTML = ''; //Show no ad for mobile
+							}
+							$( 'div.header-ad-placeholder' ).replaceWith( headerHTML );
+						}
+
+						// Find matches
+						var mql = window.matchMedia( '(orientation: portrait)' );
+
+						// If there are matches, we're in portrait
+						if ( mql.matches ) {
+
+							// Portrait orientation
+							$( '.sidebar-ad' ).find( 'div' ).remove();
+							$( '.home-pushdownAd-container' ).find( 'div' ).remove();
+							$( '.site-header-ad' ).find( 'div' ).remove();
+							AppendAdUnit( $( '.site-header-ad' ), 'housetop' );
+							AppendAdUnit( $( '.mobile-rec-ad' ), 'rec2', 'mobile-rec-ad' );
+						} else {
+							$( '.mobile-rec-ad' ).find( 'div' ).remove();
+						}
+
+						// Add a media query change listener
+						// @TODO here's some different logical compare above for `else` section
+						mql.addListener( function( m ) {
+							if ( m.matches ) { // Changed to portrait
+								$( '.sidebar-ad' ).find( 'div' ).remove();
+								$( '.site-header-ad' ).find( 'div' ).remove();
+								$( '.home-pushdownAd-container' ).find( 'div' ).remove();
+								AppendAdUnit( $( '.site-header-ad' ), 'housetop' );
+								AppendAdUnit( $( '.mobile-rec-ad' ), 'rec2' );
+							} else { // Changed to landscape
+								$( '.site-header-ad' ).find( 'div' ).remove();
+								$( '.mobile-rec-ad' ).find( 'div' ).remove();
+								AppendAdUnit( $( '.home-pushdownAd-container' ), 'mid1', 'home-pushdownAd' );
+								AppendAdUnit( $( '.site-header-ad' ), 'top', 'nav-leader' );
+								AppendAdUnit( $( '.sidebar-housetop-ad' ), 'housetop', 'housetop' );
+								AppendAdUnit( $( '.rec-one' ), 'rec1', 'rec1' );
+								AppendAdUnit( $( '.rec-two' ), 'rec2', 'rec2' );
+								$( '.trade-center-ad' ).each( function( index, element ) {
+									AppendAdUnit( $( element ), 'tc' + ( index + 1 ), 'trade-center-ad-' + ( index + 1 ) );
+								} );
+							}
+						});
+					}
+				},
+				'single_post': {
+					'init': function() {
+						SinglePostAdInjection( '.single-post-content', window.InvestorsPostMetaData );
+					},
+					'renew': function( args ) {
+						if ( 'undefined' !== typeof args && args.hasOwnProperty( 'post_id' ) ) {
+							SinglePostAdInjection( '.post-' + args.post_id  + ' .single-post-content', args );
+						}
+					}
+				},
+				'wp_home': {
+					'finalize': function() {
+						if ( $( window ).width() > 1024 ) {
+
+							// open access homepage skin ad
+							$( '<div id="oa-skin"></div>' ).appendTo( 'body' );
+							CreateAndAppendAd( $( '#oa-skin' ), 'oa-skin-ad', 'skin' );
+						}
+					}
+				},
+				'category': {
+					'finalize': function() {
+
+						// @TODO no post-load trigger found and .category-marketing is using nowhere. Remove?
+						$( document.body ).on( 'post-load', function() {
+							CreateAndAppendAd( $( '.category-marketing' ).last(), 'category-module' + Date.now(), 'rec1' );
+						} );
+					}
+				}
+			}
+		},
+		GetAdSlotInfo = function( pos, adUnit ) {
+			var adInfo = {},
+				i,
+				targeting = {};
+
+			adInfo = {
+				Slot: '',
+				Sizes: [],
+				Position: pos,
+				Section: '',
+				DisplaySponsorText: false
+			};
+
+			targeting = GetDFPCommonTargeting( adUnit );
+
+			adInfo.Slot = GetAdUnitPath( targeting );
+
+			// Push all sizes
+			if ( window.dfpAdUnits.hasOwnProperty( dfpSettings.pageType ) && window.dfpAdUnits[dfpSettings.pageType].hasOwnProperty( pos ) ) {
+				for ( i = 0; i < window.dfpAdUnits[dfpSettings.pageType][pos].sizes.length; i++ ) {
+					if ( window.dfpAdUnits[dfpSettings.pageType][pos].sizes[i][1].length > 0 ) {
+						adInfo.Sizes = $.merge( adInfo.Sizes, window.dfpAdUnits[dfpSettings.pageType][pos].sizes[i][1] );
+					}
+				}
+			}
+			return adInfo;
+		},
+		/**
+		 * Get full path of the ad unit slot.
+		 * @param {object} targeting The targeting object retrieve from the `GetDFPCommonTargeting()`.
+		 * @return {string} The full path.
+		 */
+		GetAdUnitPath = function( targeting ) {
+			var path = '/' + dfpSettings.IBDdfpID + '/ibd/' + targeting.s1;
+			if ( targeting.hasOwnProperty( 's2' ) && targeting.s2.length > 0 ) {
+				path += '/' + targeting.s2;
+				if ( targeting.hasOwnProperty( 's3' ) && targeting.s3.length > 0 ) {
+					path += '/' + targeting.s3;
+				}
+			}
+			return path;
+		},
+		/**
+		 * Injection the AdSlot into the post content
+		 * @param {string} selector DOM selecotr for the post
+		 * @param {object} postObject (Optional) The post object data.
+		 * @returns {void}
+		 */
+		SinglePostAdInjection = function( selector, postObject ) {
+			var postParagraphs = $( selector ).children( 'p' ),
+				paragraphCount = postParagraphs.length,
+				targeting,
+				rec1 = $( '<div class="adunit responsive-rec-one" data-adposition="rec1"></div>' ),
+				rec2 = $( '<div class="adunit responsive-rec-two" data-adposition="rec2"></div>' ),
+				rec3 = $( '<div class="adunit responsive-rec-three" data-adposition="rec3"></div>' );
+
+			if ( $( window ).width() <= 768 ) {
+
+				if ( 0 < $( selector ).parent().find( '.responsive-rec-one' ).length ) {
+					return;
+				}
+
+				if ( 'undefined' !== typeof postObject ) {
+					targeting = {
+						'pid': postObject.post_name,
+						'wordcount': postObject.word_count,
+						'tag': _.pluck( postObject.tags, 'name' ).join( ',' ),
+						'ticker': postObject.prim_tickers
+					};
+
+					if ( postObject.hasOwnProperty( 'is_marked_as_pp' ) && postObject.is_marked_as_pp ) {
+						rec1.data( 'permalink', postObject.permalink ).data( 'targeting-category', postObject.category );
+						rec2.data( 'permalink', postObject.permalink ).data( 'targeting-category', postObject.category );
+						rec3.data( 'permalink', postObject.permalink ).data( 'targeting-category', postObject.category );
+					}
+				}
+
+				if ( paragraphCount > 3 ) {
+					rec1.data( 'targeting', targeting ).insertAfter( postParagraphs.eq( 2 ) );
+					if ( paragraphCount >= 5 && paragraphCount < 11 ) {
+						rec2.data( 'targeting', targeting ).insertAfter( postParagraphs.eq( 4 ) );
+					} else {
+						rec2.data( 'targeting', targeting ).insertAfter( postParagraphs.eq( 5 ) );
+						rec3.data( 'targeting', targeting ).insertAfter( postParagraphs.eq( 8 ) );
+					}
+				}
+			}
+		},
+		/**
+		 * Append an adunit div and display immediately.
+		 * @deprecated
+		 * @param {object} parentJQuery DOM
+		 * @param {string} divID The ID of the div
+		 * @param {string} position The ad-position
+		 * @param {function} loadedCallback
+		 * Should be use with CAUTION
+		 * This will cause IVT drop since the ads will be displayed immediately and all other ads are lazy loaded.
+		 * Another issue is it's using global-scoped vars and will overwrite the previous settings,
+		 * and should not be used with continuous scroll.
+		 *
+		 * @returns {void}
+		 */
+		CreateAndAppendAd = function( parentJQuery, divID, position, loadedCallback ) {
+			var adDiv = '<div class="adunit" id="' + divID + '" data-adposition="' + position + '"></div>',
+				targeting = {};
+			parentJQuery.append( adDiv );
+			targeting = GetDFPCommonTargeting();
+			$( '#' + divID ).dfp({
+				dfpID: dfpSettings.IBDdfpID,
+				setTargeting: targeting,
+				collapseEmptyDivs: true,
+				lazyLoad: false,
+				afterAllAdsLoaded: function() {
+					if ( 'function' === typeof loadedCallback ) {
+						loadedCallback.call( this );
+					}
+				}
+			});
+		},
+		/**
+		 * Append an adunit div.
+		 * @param {object} parentDOM DOM
+		 * @param {string} adPosition The ad-position
+		 * @param {string} classes The additional classes of the div (optional)
+		 * @returns {void}
+		 */
+		AppendAdUnit = function( parentDOM, adPosition, classes ) {
+			var extraClasses = 'undefined' === typeof classes ? '' : ' ' + classes,
+				adDiv = '<div class="adunit' + extraClasses + '" data-adposition="' + adPosition + '"></div>';
+			parentDOM.append( adDiv );
+			return;
+		},
+		/**
+		 * Get root category of the post according to the `postCategories` object.
+		 * @param {object} postCategories `postCategories` object passed by the backend.
+		 * @returns {string} The category string.
+		 */
+		GetPostRootCategory = function( postCategories ) {
+			return postCategories[0].replace( /[^A-Za-z0-9]/g, '' ).toLowerCase();
+		},
+		/**
+		 * Get direct parent category of the post according to the `postCategories` object.
+		 * @param {object} postCategories `postCategories` object passed by the backend.
+		 * @returns {string} The category string.
+		 */
+		GetPostDirectParentCategory = function( postCategories ) {
+			if ( postCategories.length > 2 ) {
+				return postCategories[ postCategories.length - 2 ].replace( /[^A-Za-z0-9]/g, '' ).toLowerCase();
+			} else {
+				return GetPostRootCategory( postCategories );
+			}
+		},
+		/**
+		 * Get article `targeting` param.
+		 * @param {object} targeting Assigned `targeting` object.
+		 * @param {string} permalink (Optional)Permalink of the post, if not passed, use window.location.pathname.
+		 * @param {object} postCategories (Optional) The `postCategories` object. When not passed, use `window.postCategories`.
+		 * @returns {object} The `targeting` object.
+		 */
+		GetArticleTargeting = function( targeting, permalink, postCategories ) {
+			var searchKey,
+				urlSegments,
+				pid,
+				rootCategory,
+				directCategory;
+
+			if ( 'undefined' === typeof permalink ) {
+				urlSegments = permalink = window.location.pathname;
+			} else {
+				urlSegments = permalink = permalink.replace( window.location.origin, '' );
+			}
+			if ( 'undefined' === typeof postCategories ) {
+				postCategories = window.postCategories;
+			}
+
+			rootCategory = GetPostRootCategory( postCategories );
+			directCategory = GetPostDirectParentCategory( postCategories );
+			urlSegments = urlSegments.replace( /\/$/, '' ).split( '/' );
+			pid = urlSegments[ urlSegments.length - 1 ];
+			searchKey = permalink.replace( /\/$/, '' ).replace( /^\//, '' );
+
+			targeting.ptype = 'article';
+			if ( 'author' === urlSegments[1] ) {
+				targeting.s1 = 'author';
+			} else if ( window.dfpArticleMapping.hasOwnProperty( searchKey ) ) {
+				targeting.s1 = window.dfpArticleMapping[searchKey].s1;
+				targeting.s2 = window.dfpArticleMapping[searchKey].s2;
+			} else {
+				targeting.s1 = rootCategory;
+				if ( window.dfpCategoryMapping.hasOwnProperty( targeting.s1 ) ) {
+					targeting.s1 = window.dfpCategoryMapping[targeting.s1];
+				}
+
+				// For one category level articles, we don't have a s2 value.
+				if ( rootCategory !== directCategory ) {
+					targeting.s2 = directCategory;
+				}
+			}
+
+			// Special case for stock-lists and how-to-invest, no s3.
+			if ( 'stocklists' !== targeting.s1 && 'howtoinvest' !== targeting.s1 ) {
+				targeting.s3 = 'article';
+			}
+
+			// Add wordcount targeting for non-continuousscroll mode.
+			// Note:
+			//   1. wordcount in continuous scroll mode is implemented in cs plugin.
+			//   2. In CS pages, slot-level targetings will override below ones if same targeting keys are assigned.
+			if ( 'undefined' !== typeof window.InvestorsPostMetaData ) {
+				targeting.wordcount = window.InvestorsPostMetaData.word_count;
+				targeting.tags = _.pluck( window.InvestorsPostMetaData.tags, 'name' ).join( ',' );
+				targeting.tickers = window.InvestorsPostMetaData.prim_tickers;
+			}
+
+			// This will be overrided by Continuous Scrolling post names.
+			targeting.pid   = pid;
+
+			return targeting;
+		},
+		/**
+		 * Get `targeting` param for DFP.
+		 * @param {object} adUnit (Optional) jQuery DOM element of the adunit.
+		 * @returns {object} `targeting` object.
+		 */
+		GetDFPCommonTargeting = function( adUnit ) {
+			var targeting = {},
+				strKeyword = GetAdKeywords(),
+				strUserSubType = 'undefined' !== typeof userSubType ? userSubType : '0',
+				strAdTrade = GetAdVariable( 'trade', true ),
+				strAdTime = GetAdVariable( 'time', true ),
+				strAdHold = GetAdVariable( 'hold', true ),
+				strAdJob = GetAdVariable( 'job', true ),
+				strAdAge = GetAdVariable( 'age', true ),
+				roles = [],
+				i = 0,
+				nvPair = [],
+
+				// Pathname without leading and trailing slashes.
+				searchKey = window.location.pathname.replace( /\/$/, '' ).replace( /^\//, '' );
+
+			if ( strKeyword.length > 0 ) {
+				targeting.kw = strKeyword;
+			}
+			targeting.sub = strUserSubType;
+			if ( strAdTrade.length > 0 ) {
+				targeting.trade = strAdTrade.replace( 'trade=', '' );
+			}
+			if ( strAdTime.length > 0 ) {
+				targeting.time = strAdTime.replace( 'time=', '' );
+			}
+			if ( strAdHold.length > 0 ) {
+				targeting.hold = strAdHold.replace( 'hold=', '' ).split( ',' );
+			}
+			if ( strAdJob.length > 0 ) {
+				targeting.job = strAdJob.replace( 'job=', '' );
+			}
+			if ( strAdAge.length > 0 ) {
+				targeting.age = strAdAge.replace( 'age=', '' );
+			}
+			if ( 'undefined' !== typeof userAdRoles && 0 < userAdRoles.length ) {
+				roles = userAdRoles.split( ',' );
+				for ( i = 0; i < roles.length; i++ ) {
+					nvPair = roles[i].split( '=' );
+					if ( 2 === nvPair.length ) {
+						targeting[nvPair[0]] = nvPair[1];
+					}
+				}
+			}
+
+			// Page Level Targeting, see class-google-dfp.php
+			var urlSegments = window.location.pathname.replace( /\/$/, '' ).split( '/' ),
+				directCategory = '',
+				rootCategory = '',
+				pid = urlSegments[ urlSegments.length - 1 ];
+
+			if ( 'undefined' !== typeof window.postCategories ) {
+				rootCategory   = GetPostRootCategory( window.postCategories );
+				directCategory = GetPostDirectParentCategory( window.postCategories );
+			}
+
+			if ( 'partner-perspective' === urlSegments[1] ) {
+				targeting.pp = urlSegments[2];
+			}
+			if ( 'home' === dfpSettings.pageType ) {
+				targeting.pid = 'homepage';
+				targeting.s1  = 'homepage';
+				targeting.ptype = 'landing';
+			} else if ( 'partnerperspective' === dfpSettings.pageType ) {
+				targeting.ptype = 'partnerperspective';
+				targeting.s1 = window.InvestorsPartnerPerspectiveSingleData.category.slug;
+				targeting.s3 = 'article';
+				targeting.pid = pid;
+				targeting.wordcount = window.InvestorsPartnerPerspectiveSingleData.word_count;
+			} else if ( 'article' === dfpSettings.pageType ) {
+				if ( 'undefined' !== typeof adUnit && $( adUnit ).data( 'targeting-category' ) ) {
+					targeting = GetArticleTargeting( targeting, $( adUnit ).data( 'permalink' ), GetPostCategories( $( adUnit ).data( 'targeting-category' ) ) );
+				} else {
+					targeting = GetArticleTargeting( targeting );
+				}
+			} else if ( 'category-landing' === dfpSettings.pageType ) {
+				targeting.ptype = 'category-landing';
+				targeting.s1    = rootCategory;
+				if ( window.dfpCategoryMapping.hasOwnProperty( targeting.s1 ) ) {
+					targeting.s1 = window.dfpCategoryMapping[targeting.s1];
+				}
+
+				if ( 'ibdvideos' === targeting.s1 ) {
+					targeting.s1 = 'videos';
+					targeting.s2 = 'webinars';
+				} else {
+					targeting.s2    = directCategory;
+				}
+
+				targeting.pid   = targeting.s1 + '-' + targeting.s2;
+
+			} else if ( 'video' === dfpSettings.pageType ) {
+				targeting.ptype = 'video';
+				targeting.s1 = 'videos';
+				targeting.s2 = directCategory;
+				targeting.pid = pid;
+			} else {
+
+				// Case: 'landing' === dfpSettings.pageType .
+				if ( window.dfpLandingMapping.hasOwnProperty( searchKey ) ) {
+					targeting.s1 = window.dfpLandingMapping[searchKey].s1;
+					if ( window.dfpLandingMapping[searchKey].hasOwnProperty( 's2' ) ) {
+						targeting.s2 = window.dfpLandingMapping[searchKey].s2;
+					}
+				} else if ( /^data\-tables\//.test( searchKey ) ) {
+					targeting.s1 = 'stocklists';
+					targeting.s2 = 'ibddatatables';
+				} else {
+					targeting.s1 = 'other';
+				}
+				targeting.pid   = pid;
+				targeting.ptype = 'landing';
+			}
+			return targeting;
+		};
+
+	// Register AdType.
+	window.InvestorsAdvertising.registerAdType( InvestorsAdvertisingDFP );
+
+	// Export functions.
+	window.InvestorsAdvertising.GetDFPCommonTargeting = GetDFPCommonTargeting;
+	window.InvestorsAdvertising.GetDFPAdUnitPath = GetAdUnitPath;
+
+	// Extend dfp to jQuery.
+	$.dfp = $.fn.dfp = function( id, options ) {
+		var $options = options || {},
+			$id,
+			$selector = this;
+		if ( undefined === id ) {
+			$id = dfpID;
+		}
+		if ( 'object' === typeof id ) {
+			$options = id;
+			$id = $options.dfpID || dfpID;
+		}
+		if ( 'function' === typeof this ) {
+			$selector = dfpSelector;
+		}
+		init( $id, $selector, $options );
+		return this;
+	};
+
+	$( window ).load(function() {
+		if ( console ) {
+			console.log( 'adscriptdfp window.load event' );
+		}
+		if ( dfpWindowProcessed ) {
+			if ( console ) {
+				console.log( 'adscriptdfp window.load already processed' );
+			}
+			return;
+		}
+		dfpWindowProcessed = true;
+
+		if ( 'undefined' !== typeof dfpResponsive ) {
+			dfpResponsive.init();
+		}
+		var targeting = GetDFPCommonTargeting();
+		$.dfp({
+			dfpID: dfpSettings.IBDdfpID,
+			setTargeting: targeting,
+			collapseEmptyDivs: true,
+			afterEachAdLoaded: function( $adUnit ) {
+				if ( 'tc1' === $adUnit.data( 'adposition' ) && $adUnit.hasClass( 'display-block' ) ) {
+					$( '#tradingh,#tradingv' ).show();
+				}
+			}
+		});
+		if ( 'undefined' !== typeof dfpResponsive ) {
+			$( window ).on( 'resize', function() {
+				dfpResponsive.onResize();
+			});
+		}
+
+		dfpLazyLoad.init();
+	});
+
+	$( document ).ready( function() {
+		window.InvestorsUtils.EventsRouting.autoload( InvestorsAdvertisingDFP.routing );
+		setTimeout(function() {
+			if ( console ) {
+				console.log( 'window.load failover check' );
+			}
+			if ( ! dfpWindowProcessed ) {
+				if ( console ) {
+					console.log( 'window.load failover method being called' );
+				}
+				$( window ).load();
+			}
+		}, 4000 );
+	} );
+})( window.jQuery || window.Zepto || window.tire, window, InvestorsAdvertisingDfpSettings, InvestorsAdvertisingSettings );

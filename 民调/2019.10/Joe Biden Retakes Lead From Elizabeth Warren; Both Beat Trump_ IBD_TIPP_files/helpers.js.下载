@@ -1,0 +1,87 @@
+/* exported checkAgent */
+
+window.InvestorsUtils = window.InvestorsUtils || {};
+
+/**
+ * Check the agent we are on.
+ * https://support.cloudflare.com/hc/en-us/articles/229373388-Cache-Content-by-Device-Type-Mobile-Tablet-Desktop
+ *
+ * @return {string} mobile|table|desktop
+ */
+window.InvestorsUtils.checkAgent = function() {
+	'use strict';
+
+	if ( /(?:phone|windows\s+phone|ipod|blackberry|(?:android|bb\d+|meego|silk|googlebot) .+?mobile|palm|windows\s+ce|opera mini|avantgo|docomo)/i.test( navigator.userAgent ) ) {
+		return 'mobile';
+	}
+
+	if ( /(?:ipad|playbook|(?:android|bb\d+|meego|silk)(?! .+? mobile))/i.test( navigator.userAgent ) ) {
+		return 'tablet';
+	}
+
+	return 'desktop';
+};
+
+/**
+ * Delay execute function, sort of a debounce function.
+ * @param {int} after Milliseconds.
+ * @param {Function} fn Function.
+ * @return {Function} Function.
+ */
+window.InvestorsUtils.delayedExec = function( after, fn ) {
+	'use strict';
+
+	var timer;
+	return function() {
+		if ( timer ) {
+			clearTimeout( timer );
+		}
+		timer = setTimeout( fn, after );
+	};
+};
+
+/**
+ * Check if Continuous Scroll feature is on.
+ *
+ * @return {boolean} Enabled or not.
+ */
+window.InvestorsUtils.isContinuousScrollEnabled = function() {
+	'use strict';
+
+	if ( 'undefined' === typeof window.InvestorsContinuousScrollSettings || ! window.InvestorsContinuousScrollSettings[ window.InvestorsUtils.checkAgent() ] ) {
+		return false;
+	}
+	return true;
+};
+
+/**
+ * Simple polyfill for URLSearchParams.get() method, which is missing from IE.
+ * @param {string} url URL.
+ * @return {object} URLSearchParamsPolyfill.
+ * @constructor
+ */
+function URLSearchParamsPolyfill( url ) {
+	'use strict';
+
+	function get( name ) {
+		var _name = name.replace( /[\[\]]/g, '\\$&' ),
+			regex = new RegExp( '[?&]' + _name + '(=([^&#]*)|&|#|$)' ),
+			results = regex.exec( url );
+
+		if ( ! results ) {
+			return null;
+		}
+
+		if ( ! results[ 2 ] ) {
+			return '';
+		}
+
+		return decodeURIComponent( results[ 2 ].replace( /\+/g, ' ' ) );
+	}
+
+	return {
+		get: get
+	};
+}
+
+window.URLSearchParams = window.URLSearchParams || URLSearchParamsPolyfill;

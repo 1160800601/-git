@@ -1,0 +1,338 @@
+/* globals ibdChartSymbol: true, console, categoryObject,
+           userAdTrade, userAdHold, userAdTime, userAdAge, userAdJob */
+/* exported width, height, site, section, adIdentifier, GetAdKeywords, GetAdVariable */
+/* eslint-disable strict, no-magic-numbers, one-var, complexity, consistent-return */
+/* jscs:disable requireVarDeclFirst */
+/**
+ * These global variables `pos`, `width`, `height`, `site`, `section`, `displaySponsorshipText` will be used
+ * and modified by the .NET Javascript as `https://services.investors.com/jsadscripts/ibd-ads/{page-type}.php.js`
+ * in function `OAS_TranslatePos`
+ */
+var width = '',
+	height = '',
+	site = '',
+	section = '',
+	adIdentifier = '',
+	postCategories;
+
+/**
+ * `categoryObject` is extracted from `class-plugin.php`
+ */
+if ( 'undefined' !== typeof categoryObject  ) {
+	if ( categoryObject.categories.indexOf( '\\/' ) > -1 ) {
+		postCategories = GetPostCategories( categoryObject.categories );
+		if ( postCategories.length < 2 ) {
+			adIdentifier = categoryObject.categories;
+		} else {
+			adIdentifier = postCategories[postCategories.length - 2].toLowerCase();
+		}
+	} else {
+		adIdentifier = categoryObject.categories.toLowerCase();
+	}
+	adIdentifier = adIdentifier.replace( '["', '' );
+	adIdentifier = adIdentifier.replace( '"]', '' );
+}
+
+function GetPostCategories( categories ) {
+	return categories.replace( /"/g, '' ).split( '\\/' );
+}
+
+function GetAdKeywords() {
+	var strKeywords = '',
+		strTicker = window.InvestorsAdvertising.QueryStringForAd( 'Symbol' ),
+		strQuoteTicker = window.InvestorsAdvertising.GetQuoteCheckupTicker(),
+		strSearch = window.InvestorsAdvertising.QueryStringForAd( 'ntt' );
+	if (  'undefined' !== typeof ibdChartSymbol && ibdChartSymbol.length > 0 ) {
+		strTicker = ibdChartSymbol;
+	}
+	if ( strTicker.length > 0 ) {
+		strKeywords = strTicker.toUpperCase();
+	} else if ( strQuoteTicker.length > 0 ) {
+		strKeywords = strQuoteTicker.toUpperCase();
+	} else if ( strSearch.length > 0 ) {
+		strKeywords = window.InvestorsAdvertising.CleanSearchKeywords( strSearch );
+	}
+	return strKeywords;
+}
+
+/* eslint-disable max-depth */
+function GetAdVariable( name, forMediaCenter ) {
+	var adVar = '',
+		isMedia = Boolean( 'undefined' !== typeof forMediaCenter && forMediaCenter ),
+		holdVars = userAdHold.split( ',' ),
+		i = 0,
+		val = '';
+	switch ( name ) {
+	case 'trade':
+		if ( 'undefined' !== typeof userAdTrade  && userAdTrade.length > 0 ) {
+			adVar = ( isMedia ? '' : ';' ) + 'trade=' + userAdTrade;
+		}
+		break;
+	case 'time':
+		if ( 'undefined' !== typeof userAdTime  && userAdTime.length > 0 ) {
+			adVar = ( isMedia ? '' : ';' ) + 'time=' + userAdTime;
+		}
+		break;
+	case 'hold':
+		if ( 'undefined' === typeof userAdHold || 0 === userAdHold.length ) {
+			break;
+		}
+		for ( i = 0; i < holdVars.length; i++ ) {
+			if ( isMedia ) {
+				val = holdVars[i];
+				if ( 'funds/etfs' === val ) {
+					val = 'funds';
+				}
+				if ( adVar.length > 0 ) {
+					adVar += ',';
+				}
+				adVar += val;
+			} else if ( 'funds/etfs' === holdVars[i] ) {
+				adVar += ';hold=funds';
+			} else {
+				adVar = adVar + ';hold=' + holdVars[i];
+			}
+		}
+		if ( isMedia && adVar.length > 0 ) {
+			adVar = 'hold=' + adVar;
+		}
+		break;
+	case 'job':
+		if ( 'undefined' !== typeof userAdJob  && userAdJob.length > 0 ) {
+			adVar = ( isMedia ? '' : ';' ) + 'job=' + userAdJob;
+		}
+		break;
+	case 'age':
+		if ( 'undefined' !== typeof userAdAge  && userAdAge.length > 0 ) {
+			adVar = ( isMedia ? '' : ';' ) + 'age=' + userAdAge;
+		}
+		break;
+	default:
+		break;
+	}
+	return adVar;
+}
+/* eslint-enable max-depth */
+
+/**
+ * Boot-up investors-advertising
+ */
+( function( $, window ) {
+	'use strict';
+	var InvestorsAdvertising = {
+		adTypes: [],
+		/**
+		 * `breakPoint` is used to determine the device type.
+		 * Different sizes of ads will be injected according to this.
+		 */
+		breakPoint: {
+			value: '',
+			previousValue: '',
+			refreshValue: function() { // Function to get ad size.
+				this.previousValue = this.value;
+				this.value = window.getComputedStyle( document.querySelector( 'body' ), ':before' ).getPropertyValue( 'content' ).replace( /\"/g, '' );
+
+				// Resize event is happening on scroll for mobile browsers. previous value needed to prevent unnecessary reload of ads.
+				if ( this.previousValue !== this.value ) {
+					jQuery( window ).trigger( 'breakpoint-refreshed.advertising' );
+				}
+			}
+		},
+		/**
+		 * Add new advertisement type to call functions automatically.
+		 *
+		 * These functions will be called autaomatically in each adType:
+		 * `injectTabletAds`
+		 * `injectDesktopAds`
+		 *
+		 * @param {object} adType AdObject
+		 * @returns {void}
+		 */
+		registerAdType: function( adType ) {
+			this.adTypes.push( adType );
+		},
+		QueryStringForAd: function( ji ) {
+			var searchIndex = 1,
+				hu = window.location.search.substring( searchIndex ),
+				gy = hu.split( '&' ),
+				ft = '',
+				i = 0;
+			for ( i = 0; i < gy.length; i++ ) {
+				ft = gy[i].split( '=' );
+				if ( ft[0].toLowerCase() === ji.toLowerCase() ) {
+					return ft[1];
+				}
+			}
+			try {
+				if ( null === parent || null === parent.window ) {
+					return '';
+				}
+				for ( i = 0; i < gy.length; i++ ) {
+					ft = gy[i].split( '=' );
+					if ( ft[0].toLowerCase() === ji.toLowerCase() ) {
+						return ft[1];
+					}
+				}
+			} catch ( e ) {
+				console.log( e );
+			}
+			return '';
+		},
+		CleanSearchKeywords: function( strSearch ) {
+			var cleanString = decodeURIComponent( strSearch ),
+				maxLength = 55;
+			cleanString = cleanString.replace( /#|\"|,|\*|\.|\(|\)|=|\+|<|>|\[|\]|%|;/gi, '' );
+			if ( cleanString.length > maxLength ) {
+				cleanString = cleanString.substring( 0, maxLength );
+			}
+			return cleanString;
+		},
+		GetQuoteCheckupTicker: function() {
+			var ticker = '',
+				url = window.location.href.toLowerCase(),
+				pos = 0,
+				ext = '',
+				increment = 1;
+			if ( url.indexOf( '/quotes/' ) > -1 || url.indexOf( '/stock-checkup/' ) > -1 ) {
+				pos = url.lastIndexOf( '-' );
+				if ( pos > -1 ) {
+					pos += increment;
+					ext = url.indexOf( '.htm' ) > -1 ? '.htm' : '.aspx';
+					ticker = url.substr( pos, url.indexOf( ext ) - pos );
+				}
+			}
+			try {
+				if ( 0 !== ticker.length || null === parent || null === parent.window ) {
+					return false;
+				}
+				url = parent.window.location.href.toLowerCase();
+				if ( url.indexOf( '/quotes/' ) > -1 || url.indexOf( '/stock-checkup/' ) > -1 ) {
+					pos = url.lastIndexOf( '-' );
+					if ( pos > -1 ) {
+						pos += increment;
+						ext = url.indexOf( '.htm' ) > -1 ? '.htm' : '.aspx';
+						ticker = url.substr( pos, url.indexOf( ext ) - pos );
+					}
+				}
+			} catch ( e ) {
+				console.log( e );
+				return false;
+			}
+			return ticker;
+		},
+		/**
+		 * Register routing based on page
+		 */
+		routing: {
+			'common': {
+				'init': function() {
+
+					// Auto Ads Injection by breakPoint
+					$( window ).on( 'breakpoint-refreshed.advertising', function() {
+						var i;
+
+						// Disable for Continuous Scroll, since ads injection strategy is different.
+						// Must check dynamically.
+						if ( ! window.InvestorsUtils.isContinuousScrollEnabled() ) {
+							for ( i in window.InvestorsAdvertising.adTypes ) {
+								if ( 'tablet-ad-size' === window.InvestorsAdvertising.breakPoint.value && 'function' === typeof window.InvestorsAdvertising.adTypes[i].injectTabletAds ) {
+									window.InvestorsAdvertising.adTypes[i].injectTabletAds();
+								} else if ( 'desktop-ad-size' === window.InvestorsAdvertising.breakPoint.value && 'function' === typeof window.InvestorsAdvertising.adTypes[i].injectDesktopAds ) {
+									window.InvestorsAdvertising.adTypes[i].injectDesktopAds();
+								}
+							}
+						}
+					});
+					$( window ).on( 'resize', function() {
+						window.InvestorsAdvertising.breakPoint.refreshValue();
+					} );
+
+					// Immediately inject ads.
+					window.InvestorsAdvertising.breakPoint.refreshValue();
+
+					/**
+					 * @todo pushdownContainer can be find nowhere in the theme, remove ?
+					 */
+					var pushdownContainer = $( '.home-pushdownAd-container' ),
+						windowSize = $( window ).width();
+
+					// Check to remove ads from the DOM if they are not displayed at a certain breakpoint
+					if ( windowSize <= 1000 ) {
+						pushdownContainer.parent( '.row' ).remove();
+						pushdownContainer.find( '.home-pushdownAd' ).remove();
+					}
+				}
+			},
+			'wp_home': {
+				'finalize': function() {
+
+					// Relates to home page offer module. Template: page-home.php
+					var homepageOfferModule = {
+						userRoles: [
+							'role_leaderboard',
+							'role_icom',
+							'role_eibd',
+							'role_etables',
+							'role_tru10',
+							'role_marketsmith',
+							'role_swingtrader'
+						],
+						matchedOffer: false
+					};
+
+					// Find the offer which matched all roles conditions.
+					// Note current user role values (boolean) are stored in window object,
+					// e.g. window.role_{role_name}.
+					$( '.homepage-offer-module' ).each( function() {
+						var rolesMatched = false, i, r;
+						for ( i in homepageOfferModule.userRoles ) {
+							r = homepageOfferModule.userRoles[ i ];
+							if ( ! window.hasOwnProperty( r ) ) {
+								continue;
+							}
+
+							// Offer that requires user to be the selected roles.
+							if ( $( this ).hasClass( r ) ) {
+								if ( true === window[ r ] ) {
+									rolesMatched = true;
+								} else {
+									rolesMatched = false;
+									break;
+								}
+							}
+
+							// Offer that requires user NOT to be the selected roles.
+							if ( $( this ).hasClass( r + '_false' ) ) {
+								if ( false === window[ r ] ) {
+									rolesMatched = true;
+								} else {
+									rolesMatched = false;
+									break;
+								}
+							}
+
+						} // End for ( homepageOfferModule.userRoles )
+
+						if ( rolesMatched ) {
+							homepageOfferModule.matchedOffer = $( this );
+							return false; // This breaks the loop.
+						}
+					} ); // End each ( .homepage-offer-module )
+
+					// If no offer matched, attempt to find offer that does not require any roles (role_none).
+					homepageOfferModule.matchedOffer = homepageOfferModule.matchedOffer || $( '.homepage-offer-module.role_NONE' );
+					if ( false !== homepageOfferModule.matchedOffer && homepageOfferModule.matchedOffer.length > 0 ) {
+						homepageOfferModule.matchedOffer.fadeIn();
+					}
+				}
+			}
+		}
+	};
+
+	window.InvestorsAdvertising = InvestorsAdvertising; // So the IDE can parse the structure of `InvestorsAdvertising`
+	$( document ).ready( function() {
+
+		// Fire advertising event for each page
+		window.InvestorsUtils.EventsRouting.autoload( window.InvestorsAdvertising.routing );
+	} );
+} )( jQuery, window );

@@ -1,0 +1,172 @@
+/**
+ * Investors Utils Cookie.
+ */
+
+/* eslint-disable no-magic-numbers, valid-jsdoc, radix */
+/* jshint -W065 */
+
+window.InvestorsUtils = window.InvestorsUtils || {};
+
+/**
+ * Cookie related functions. Moved from globalFunctions.js.
+ */
+window.InvestorsUtils.Cookie = ( function() {
+	'use strict';
+
+	/**
+	 * Get whether the current user is logged in.
+	 *
+	 * Based on a cookie value.
+	 * Exported, and also used with video shortcodes.
+	 *
+	 * @returns {boolean} loggedIn Whether the user is logged in.
+	 */
+	function isUserLoggedIn () {
+		return '' !== document.cookie.replace( /(?:(?:^|.*;\s*).ASPXAUTH\s*\=\s*([^;]*).*$)|^.*$/, '$1' );
+	}
+
+	/**
+	 * Normal set, use 2 parameters for session cookie or 3 parameters to set
+	 * expiration date.
+	 */
+	function setCookie( cname, num, exdays ) {
+		var cookieName = cname,
+			cookieValue = num,
+			cookiePath = '/',
+			cookieDomain, expireDate, cookieFullValue, cookieExpires;
+
+		if ( 'localhost' === window.location.hostname.toLowerCase() ) {
+			cookieDomain = 'localhost';
+		} else {
+			cookieDomain = window.envURL;
+		}
+
+		// Expiration or session logic.
+		if ( ! exdays ) {
+			cookieFullValue = cookieName + '=' + cookieValue + '; path=' + cookiePath + '; domain=' + cookieDomain;
+		} else {
+			expireDate = new Date();
+			expireDate.setTime( expireDate.getTime() + exdays * 24 * 60 * 60 * 1000 );
+			expireDate.setHours( 0 );
+			expireDate.setMinutes( 0 );
+			expireDate.setSeconds( 0 );
+			cookieExpires = expireDate.toGMTString();
+			cookieFullValue = cookieName + '=' + cookieValue + '; expires=' + cookieExpires + '; path=' + cookiePath + '; domain=' + cookieDomain;
+		}
+		document.cookie = cookieFullValue;
+	}
+
+	/**
+	 * If cookie exists pull out the value, if not return ''.
+	 */
+	function getCookie( cname ) {
+		var name = cname + '=',
+			cookieParts = document.cookie.split( ';' ),
+			i, c;
+
+		for ( i = 0; i < cookieParts.length; i++ ) {
+			c = cookieParts[ i ];
+			while ( ' ' === c.charAt( 0 ) ) {
+				c = c.substring( 1 );
+			}
+			if ( 0 === c.indexOf( name ) ) {
+				return c.substring( name.length, c.length );
+			}
+		}
+		return '';
+	}
+
+	/**
+	 * Deletes cookie by expiring it.
+	 */
+	function deleteCookie( cname ) {
+		setCookie( cname, '', -1 );
+	}
+
+	/**
+	 * Return cookie value or null if it does not exist.
+	 */
+	function checkCookie( cname ) {
+		var cookieValue = getCookie( cname );
+		if ( cookieValue ) {
+			return cookieValue;
+		} else {
+			return null;
+		}
+	}
+
+	/**
+	 * Return the value of the cookie, sets cookie if not existing to zero as a
+	 * session cookie.
+	 */
+	function checkSessionCountingCookie( cname ) {
+		var cookieNumValue = getCookie( cname );
+		if ( cookieNumValue ) {
+			return parseInt( cookieNumValue );
+		} else {
+			setCookie( cname, 0 );
+			return parseInt( 0 );
+		}
+	}
+
+	/**
+	 * Increment session cookie, if it doesn't exist make it with a value of 1
+	 */
+	function incrementSessionCountingCookie( cname ) {
+		var cookieNumValue = getCookie( cname );
+		if ( cookieNumValue ) {
+			setCookie( cname, parseInt( cookieNumValue ) + 1 );
+		} else {
+			setCookie( cname, 1 );
+		}
+	}
+
+	/**
+	 * Return the value of the cookie, sets cookie if not existing to zero as a
+	 * persistent cookie, default to 1 day if no parameter.
+	 */
+	function checkPersistentCountingCookie( cname, exdays ) {
+		var cookieNumValue = getCookie( cname );
+		if ( cookieNumValue ) {
+			return parseInt( cookieNumValue );
+		} else if ( exdays ) {
+			setCookie( cname, 0, exdays );
+			return parseInt( 0 );
+		} else {
+			setCookie( cname, 0, 1 );
+			return parseInt( 0 );
+		}
+	}
+
+	/**
+	 * Increment persistent cookie, if it doesn't exist make it with a value of 1
+	 * and expiration day of 1.
+	 */
+	function incrementPersistentCountingCookie( cname, exdays ) {
+		var cookieNumValue = getCookie( cname );
+		if ( cookieNumValue ) {
+			if ( exdays ) {
+				setCookie( cname, parseInt( cookieNumValue ) + 1, exdays );
+			} else {
+				setCookie( cname, parseInt( cookieNumValue ) + 1, 1 );
+			}
+		} else if ( exdays ) {
+			setCookie( cname, 1, exdays );
+		} else {
+			setCookie( cname, 1, 1 );
+		}
+	}
+
+	return {
+		isUserLoggedIn: isUserLoggedIn,
+		setCookie: setCookie,
+		getCookie: getCookie,
+		deleteCookie: deleteCookie,
+		checkCookie: checkCookie,
+		checkSessionCountingCookie: checkSessionCountingCookie,
+		incrementSessionCountingCookie: incrementSessionCountingCookie,
+		checkPersistentCountingCookie: checkPersistentCountingCookie,
+		incrementPersistentCountingCookie: incrementPersistentCountingCookie
+	};
+
+} )();

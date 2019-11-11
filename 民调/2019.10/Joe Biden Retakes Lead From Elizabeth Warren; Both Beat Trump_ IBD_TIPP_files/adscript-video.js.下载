@@ -1,0 +1,113 @@
+/* globals console, GetAdVariable, userSubType, InvestorsAdvertisingDfpSettings */
+/* eslint-disable strict, no-unused-vars */
+/* exported GenerateVideoAdUrl */
+/* eslint-disable complexity */
+
+// jscs:disable requireCamelCaseOrUpperCaseIdentifiers
+// jscs:disable requirePaddingNewLinesBeforeLineComments
+/**
+ * Generate pre-roll ad request url.
+ * @param {int} vid The post id of the video.
+ * @param {string} vcate The direct parent of the video category.
+ * @param {object} videoTargeting (Optional) If `videoTargeting` is passed, will override the common targeting values.
+ * @return {string} The ad request url.
+ */
+function GenerateVideoAdUrl( vid, vcate, videoTargeting ) {
+	var adUrl = '',
+		commonTargeting = window.InvestorsAdvertising.GetDFPCommonTargeting(),
+		randomMultiplier = 10000000000000000,
+		vcategory = ( 'undefined' !== typeof vcate ? vcate : '' ).replace( / /g, '-' ).toLowerCase(),
+		suppressHowToInvest = 'Off';
+
+	// Read from DFP settings set in admin interface.
+	if ( 'undefined' !== typeof InvestorsAdvertisingDfpSettings ) {
+		suppressHowToInvest = InvestorsAdvertisingDfpSettings.suppressHowToInvest;
+	}
+
+	commonTargeting.s3 = ''; // Pre-rolls don't need `s3` to generate ad unit path.
+	commonTargeting.test = ( new window.URLSearchParams( window.location.search ) ).get( InvestorsAdvertisingDfpSettings.testTagKey );
+
+	if ( null === commonTargeting.test ) {
+		commonTargeting.test = '';
+	}
+
+	// Use video targeting to override common targeting values.
+	if ( 'undefined' !== typeof videoTargeting ) {
+		videoTargeting.s2 = vcategory;
+		Object.keys( videoTargeting ).map( function( key ) {
+			commonTargeting[key] = videoTargeting[key];
+		} );
+	}
+
+	adUrl = 'https://pubads.g.doubleclick.net/gampad/ads?' +
+		'env=vp&' +
+		'gdfp_req=1&' +
+		'impl=s&' +
+		'vid=' + vid + '&' +
+		'output=vast&' +
+		'iu=' + encodeURIComponent( window.InvestorsAdvertising.GetDFPAdUnitPath( commonTargeting ) ) + '&' +
+		'cmsid=' + window.InvestorsAdvertisingDfpSettings.mrssCmsId + '&' +
+		'sz=640x480&' +
+		'unviewed_position_start=1&' +
+		'url=' + encodeURIComponent( window.location ) + '&' +
+		'description_url=' + encodeURIComponent( window.location ) + '&' +
+		'correlator=' +  Math.random() * randomMultiplier + '&' +
+		'cust_params=' + GetMediaCenterCustomParams( commonTargeting );
+
+	// Suppress pre-roll ads for entire 'How To Invest' videos.
+	if ( 0 === vcategory.indexOf( 'how-to-invest' ) && 'On' === suppressHowToInvest ) {
+		console.log( vcategory + ': Pre-Roll Suppressed' );
+		adUrl = '';
+	}
+
+	return adUrl;
+}
+
+/**
+ * Generate the query string for the `cust_params` part.
+ * @param {object} extraParams Key-value pairs.
+ * @return {string} The encoded value of the `cust_params`.
+ */
+function GetMediaCenterCustomParams( extraParams ) {
+	var params = '',
+		kvPairs = [ 'test', 's1', 's2', 's3', 'pp', 'pid', 'role_eibd', 'role_etb', 'role_tru', 'role_swt', 'role_ms', 'role_icom', 'role_ldb' ],
+		i,
+		strUserSubType = 'undefined' !== typeof userSubType ? userSubType : '0',
+		strAdTrade = GetAdVariable( 'trade', true ),
+		strAdTime = GetAdVariable( 'time', true ),
+		strAdHold = GetAdVariable( 'hold', true ),
+		strAdJob = GetAdVariable( 'job', true ),
+		strAdAge = GetAdVariable( 'age', true );
+
+	strUserSubType = 'sub=' + strUserSubType;
+	params = strUserSubType;
+
+	if ( strAdTrade.length > 0 ) {
+		params += '&' + strAdTrade;
+	}
+	if ( strAdTime.length > 0 ) {
+		params += '&' + strAdTime;
+	}
+	if ( strAdHold.length > 0 ) {
+		params += '&' + strAdHold;
+	}
+	if ( strAdJob.length > 0 ) {
+		params += '&' + strAdJob;
+	}
+	if ( strAdAge.length > 0 ) {
+		params += '&' + strAdAge;
+	}
+
+	// Targeting params.
+	for ( i in kvPairs ) {
+		if ( extraParams.hasOwnProperty( kvPairs[i] ) ) {
+			params += '&' + kvPairs[i] + '=' + encodeURIComponent( extraParams[ kvPairs[i]] );
+		}
+	}
+
+	// Constant params.
+	params += '&cue=pre';
+	params += '&pos=video';
+
+	return params.replace( /=/g, '%3D' ).replace( /&/g, '%26' ).replace( /,/g, '%2C' );
+}

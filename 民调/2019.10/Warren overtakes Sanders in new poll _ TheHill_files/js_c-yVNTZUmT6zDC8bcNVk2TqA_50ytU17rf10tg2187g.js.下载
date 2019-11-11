@@ -1,0 +1,21 @@
+(function($) {
+  Drupal.behaviors.rolloverpeople = {
+    attach: function(context) {
+      jQuery(".rollover-people").mouseenter(function(){
+        jQuery('#rollover-people-' + jQuery(this).find('.rollover-people-link').first().attr('data-nid')).show();
+      })
+      .mouseleave(function(){
+        jQuery('#rollover-people-' + jQuery(this).find('.rollover-people-link').first().attr('data-nid')).hide();
+      });
+
+      // Hide it when clicking anywhere else except the popup and the trigger
+      jQuery('body').on('touchstart', function (e) {
+        if (!jQuery(e.target).parents().andSelf().is('.rollover-people')) {
+          jQuery(".rollover-people-block").hide();
+        }
+      });
+    }
+  };
+})(jQuery);
+
+;

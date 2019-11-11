@@ -1,0 +1,15 @@
+/* global jQuery */
+( function( $ ) {
+    'use strict';
+
+    $( '.emerging-pattern' ).on( 'click touchstart', function() {
+        if ( ! $( '.card-tooltip', this ).is( ':visible' ) ) {
+            $( '.card-tooltip', this ).fadeIn();
+            $( this ).css( 'cursor', 'default' );
+        }
+    });
+    $( '.emerging-pattern .close' ).on( 'click touchstart', function() {
+        $( this ).parent().fadeOut();
+        $( '.emerging-pattern' ).css( 'cursor', 'pointer' );
+    });
+} )( jQuery );

@@ -1,0 +1,55 @@
+/**
+ * Investors Utils Cache.
+ */
+
+window.InvestorsUtils.Cache = window.InvestorsUtils.Cache || {};
+
+/**
+ * Simple cache getter/setter using localStorage.
+ * @return {object} Cache getter/setter.
+ */
+window.InvestorsUtils.Cache = ( function() {
+	'use strict';
+
+	function get( name ) {
+		var cache = localStorage.getItem( name );
+
+		if ( ! cache ) {
+			return null;
+		}
+
+		// If the cache is not set by this set() method, return as is.
+		try {
+			cache = JSON.parse( cache );
+			if ( ! cache._value || ! cache._expire ) {
+				return cache;
+			}
+		} catch ( e ) {
+			window.console.error( e );
+			return cache;
+		}
+
+		// Expired.
+		if ( cache._expire < Date.now() ) {
+			localStorage.removeItem( name );
+			return null;
+		}
+
+		return cache._value;
+	}
+
+	function set( name, value, expireSeconds ) {
+		var millisInSecond = 1000,
+			cache = {
+				_value: value,
+				_expire: Date.now() + expireSeconds * millisInSecond // Time when the data will be expired.
+			};
+		localStorage.setItem( name, JSON.stringify( cache ) );
+	}
+
+	return {
+		get: get,
+		set: set
+	};
+
+} )();

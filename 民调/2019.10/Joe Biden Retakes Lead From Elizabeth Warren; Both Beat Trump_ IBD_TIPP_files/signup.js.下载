@@ -1,0 +1,226 @@
+/**
+ * Investors Newsletters
+ */
+
+/* global InvestorsNewslettersData */
+jQuery( document ).ready( function() {
+	'use strict';
+
+	// InvestorsNewslettersData
+	// - post_id, current post id
+	// - api_url, newsletter sign up url
+	// - is_front, current page is front page, if yes, post_id is not used
+
+	InvestorsNewslettersSignup( InvestorsNewslettersData.post_id );
+
+	// Register to event when article is lazy loaded, e.g. by paywall, continuous
+	// scroll.
+	window.InvestorsUtils.EventsRouting.register( {
+		single_post: {
+			renew: function( args ) {
+				InvestorsNewslettersSignup( args.post_id );
+			}
+		}
+	} );
+
+	function InvestorsNewslettersSignup( postId ) {
+
+		/**
+		 * Container element of the newsletter signup widget in the post or in the
+		 * front page.
+		 * All element query will be limited inside this container.
+		 */
+		var container = getContainer();
+
+		listen();
+
+		/**
+		 * Initiate listeners.
+		 *
+		 * @return {void}
+		 */
+		function listen() {
+
+			// Show sign up popup.
+			container.on(
+				'click touch', '.su-now', function() {
+					el( '.sign-up-popup, .popup-selection' ).fadeIn();
+				}
+			);
+
+			// Close sign up popup.
+			container.on(
+				'click touch', '.popup-close, .su-all-done', function() {
+					el( '.popup' ).fadeOut();
+				}
+			);
+
+			// Send email on go click.
+			container.on(
+				'click touch', '.su-go', function() {
+					subscribe();
+				}
+			);
+
+			// Close sign up popup & remove mask
+			container.on(
+				'click touch', '.su-all-close', function() {
+					el( '.popup' ).fadeOut();
+					el( '.sign-up-popup' ).fadeOut();
+				}
+			);
+
+			// Subscribe directly
+			container.on(
+				'click touch', '.su-subscribe', function() {
+					if ( subscribe() ) {
+						el( '.sign-up-popup' ).fadeIn();
+					}
+				}
+			);
+		}
+
+		/**
+		 * Validate form & send info.
+		 *
+		 * @return {boolean} Valid
+		 */
+		function subscribe() {
+			var email = el( '.subscribe-widget-email' ).val(),
+				valid = validateSignUpForm( email );
+
+			if ( valid ) {
+				sendCustomerInfo( email, getMailingList() );
+			}
+			return valid;
+		}
+
+		/**
+		 * Send customer info to ajax service to sign them up.
+		 *
+		 * @param {string} email Email address.
+		 * @param {array} subscribeTo To pass to preferences.
+		 * @return {void}
+		 */
+		function sendCustomerInfo( email, subscribeTo ) {
+			jQuery.ajax(
+				{
+					url: InvestorsNewslettersData.api_url,
+					method: 'POST',
+					contentType: 'application/json; charset=utf-8',
+					dataType: 'jsonp',
+					data: {
+						emailAddress: JSON.stringify( email ),
+						preferences: JSON.stringify( subscribeTo.join() )
+					},
+					success: function() {
+						confirm( true );
+					},
+					error: function() {
+						confirm( false );
+					}
+				}
+			);
+		}
+
+		/**
+		 *  Check if form is valid.
+		 *
+		 * @param {string} email The email address.
+		 * @return {boolean} isValid Whether the form is valid.
+		 */
+		function validateSignUpForm( email ) {
+			var emailValid = false,
+				newsletterValid = false,
+				emailMessageElement = el( '.email-message' ),
+				checkboxMessageElement = el( '.checkbox-message' );
+
+			emailMessageElement.hide();
+			checkboxMessageElement.hide();
+
+			if ( isValidEmailAddress( email ) ) {
+				emailValid = true;
+			} else {
+				emailMessageElement.slideDown();
+			}
+
+			if ( 0 < getMailingList().length ) {
+				newsletterValid = true;
+			} else {
+				checkboxMessageElement.slideDown();
+			}
+
+			return emailValid && newsletterValid;
+		}
+
+		/**
+		 *  Get subscribe list.
+		 *
+		 * @return {array} subscribe list of ids.
+		 */
+		function getMailingList() {
+			return el( ':checkbox:checked' ).map(
+				function() {
+					return this.id;
+				}
+			).get();
+		}
+
+		/**
+		 *  Check if email is valid.
+		 *
+		 * @param {string} email The email address.
+		 * @return {boolean} isValid Whether the email address is valid.
+		 */
+		function isValidEmailAddress( email ) {
+			var pattern = /^([a-z\d!#$%&'*+\-\/=?^_`{|}~\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF]+(\.[a-z\d!#$%&'*+\-\/=?^_`{|}~\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF]+)*|"((([ \t]*\r\n)?[ \t]+)?([\x01-\x08\x0b\x0c\x0e-\x1f\x7f\x21\x23-\x5b\x5d-\x7e\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF]|\\[\x01-\x09\x0b\x0c\x0d-\x7f\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF]))*(([ \t]*\r\n)?[ \t]+)?")@(([a-z\d\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF]|[a-z\d\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF][a-z\d\-._~\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF]*[a-z\d\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])\.)+([a-z\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF]|[a-z\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF][a-z\d\-._~\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF]*[a-z\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])\.?$/i;
+			return pattern.test( email );
+		}
+
+		/**
+		 *  Show confirmation message.
+		 *
+		 * @param {boolean} success Was the email sent correctly.
+		 * @return {void}
+		 */
+		function confirm( success ) {
+			if ( success ) {
+				el( '.popup-selection' ).fadeOut();
+				el( '.popup-success' ).fadeIn();
+			} else {
+				el( '.popup-selection' ).fadeOut();
+				el( '.popup-error' ).fadeIn();
+			}
+		}
+
+		/**
+		 * Gets the container element of the newsletter signup form.
+		 * @return {Element} jQuery element.
+		 */
+		function getContainer() {
+			if ( isFront() ) {
+				return jQuery( '.subscribe-widget-frontpage' );
+			}
+			return jQuery( '.post-' + postId + ' .subscribe-widget' );
+		}
+
+		/**
+		 * Returns the element within the newsletter container.
+		 * @param {String} selector Selector
+		 * @return {Element} jQuery element
+		 */
+		function el( selector ) {
+			return container.find( selector );
+		}
+
+		/**
+		 * If the current page is the front page.
+		 * @return {boolean} True if it's front page.
+		 */
+		function isFront() {
+			return '1' === InvestorsNewslettersData.is_front;
+		}
+
+	}
+
+} );

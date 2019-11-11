@@ -1,0 +1,105 @@
+/**
+ * Investors Utils EventsRouting.
+ */
+
+window.InvestorsUtils = window.InvestorsUtils || {};
+
+/**
+ * DOM-based Routing.
+ * Based on http://goo.gl/EUTi53 by Paul Irish
+ *
+ * Only fires on body classes that match. If a body class contains a dash,
+ * replace the dash with an underscore.
+ */
+window.InvestorsUtils.EventsRouting = ( function( $ ) {
+	'use strict';
+
+	/**
+	 * Routes.
+	 * Array of object {
+	 *   'page': {
+	 *     'func': function( args ) {}
+	 *   }
+	 * }
+	 * - page is determined from body class, e.g. single-post
+	 * - func is a function to be called at specific step, init, finalize
+	 */
+	var routes = [];
+
+	/**
+	 * Registers route.
+	 *
+	 * @param {object} route Route object.
+	 * @return {void}
+	 */
+	function register( route ) {
+		routes.push( route );
+	}
+
+	/**
+	 * Registers and fires immediately, used when page load.
+	 *
+	 * @param {object} route Route object.
+	 * @return {void}
+	 */
+	function autoload( route ) {
+		register( route );
+
+		// Fire common init JS
+		_fire( route, 'common', 'init' );
+
+		// Fire page-specific init JS, and then finalize JS
+		$.each( document.body.className.replace( /-/g, '_' ).split( /\s+/ ), function( i, classes ) {
+			_fire( route, classes, 'init' );
+			_fire( route, classes, 'finalize' );
+		} );
+
+		// Fire common finalize JS
+		_fire( route, 'common', 'finalize' );
+	}
+
+	/**
+	 * Fires all routes matching the page and func.
+	 *
+	 * @param {string} page Page name.
+	 * @param {string} func Function name.
+	 * @param {mixed} args Arguments of the function.
+	 * @return {void}
+	 */
+	function fireAll( page, func, args ) {
+		var i;
+		for ( i in routes ) {
+			_fire( routes[ i ], page, func, args );
+		}
+	}
+
+	/**
+	 * Fires route.
+	 *
+	 * @param {object} route Route object.
+	 * @param {string} page Page name.
+	 * @param {string} func Function name.
+	 * @param {mixed} args Arguments of the function.
+	 * @return {void}
+	 * @private
+	 */
+	function _fire( route, page, func, args ) {
+		var canFire,
+			_func = undefined === func ? 'init' : func;
+
+		canFire = '' !== page;
+		canFire = canFire && route[ page ];
+		canFire = canFire && 'function' === typeof route[ page ][ _func ];
+
+		if ( canFire ) {
+			route[ page ][ _func ]( args );
+		}
+	}
+
+	return {
+		register: register,
+		autoload: autoload,
+		fireAll: fireAll
+	};
+
+} )( jQuery );

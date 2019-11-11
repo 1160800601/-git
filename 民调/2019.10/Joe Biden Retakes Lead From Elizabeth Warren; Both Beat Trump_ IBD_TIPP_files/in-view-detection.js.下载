@@ -1,0 +1,94 @@
+/**
+ * Investors Utils InViewDetection.
+ */
+
+window.InvestorsUtils = window.InvestorsUtils || {};
+
+/**
+ * InViewDetection, registers event with selector for detection if in view.
+ */
+window.InvestorsUtils.InViewDetection = ( function( $ ) {
+	'use strict';
+
+	/**
+	 * All registered events {eventName: selector}.
+	 * @type {object}
+	 */
+	var events = {};
+
+	/**
+	 * Registers event with the selector.
+	 *
+	 * @param {string} eventName Event name.
+	 * @param {string} selector Element selector.
+	 * @return {void}
+	 */
+	function register( eventName, selector ) {
+		events[ eventName ] = selector;
+		$( window ).on( 'scroll.inviewlazy resize.inviewlazy lookup.inviewlazy', _detectInView );
+	}
+
+	/**
+	 * If the element is in view.
+	 *
+	 * @param {jQuery} element jQuery element.
+	 * @return {boolean} True if in view.
+	 */
+	function isElementInView( element ) {
+		var wt = $( window ).scrollTop(),
+			th = 0,
+			wb = wt + $( window ).height(),
+			et = element.offset().top,
+			eb = et + element.height(),
+			isVisible = et > 0 && eb >= wt - th && et <= wb + th;
+
+		return isVisible;
+	}
+
+	/**
+	 * Ignore the element from trigger the event.
+	 *
+	 * @param {string} element Element selector.
+	 * @return {void}
+	 */
+	function ignoreElement( element ) {
+		$( element ).addClass( 'inview-event-ignore' );
+	}
+
+	/**
+	 * Callback function to detect all registered elements in view.
+	 *
+	 * @return {void}
+	 * @private
+	 */
+	function _detectInView() {
+		var eventName;
+		for ( eventName in events ) {
+			$( events[ eventName ] ).each( _detectElementInViewFunc( eventName ) );
+		}
+	}
+
+	/**
+	 * Returns callback function for `$( element ).each( callback )` to detect if
+	 * the registered element is in view.
+	 *
+	 * @see _detectInView
+	 * @param {string} eventName Event name.
+	 * @return {Function} Callback function for $( element ).each( callback ).
+	 * @private
+	 */
+	function _detectElementInViewFunc( eventName ) {
+		return function( i, element ) {
+			if ( ! $( element ).hasClass( 'inview-event-ignore' ) && isElementInView( $( element ) ) ) {
+				$( window ).trigger( eventName, element );
+			}
+		};
+	}
+
+	return {
+		register: register,
+		isElementInView: isElementInView,
+		ignoreElement: ignoreElement
+	};
+
+} )( jQuery );

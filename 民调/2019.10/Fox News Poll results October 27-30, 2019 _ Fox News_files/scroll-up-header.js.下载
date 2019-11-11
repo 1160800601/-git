@@ -1,0 +1,4 @@
+/*! updated; 10-09-2019 01:40 PM **/
+
+
+Modulr.define("core.base:modules/scroll-up-header",["require","jquery","utils/environment","core.plugins:OnScroll","core.plugins:OnWindowResize"],function(require,$,Env){var OnScroll=require("core.plugins:OnScroll"),OnResize=require("core.plugins:OnWindowResize"),siteId=Env.getSiteId();return new function(){if("foxbusiness"!==siteId)return!1;var target=$(".site-header"),body=$("body"),win=$(window);function trigger(){if(1024<=win.width()){var currDir=null;OnScroll(function(dir){0===win.scrollTop()?nonSticky():"up"===dir&&"up"!==currDir?(currDir="up",body.css("padding-top",target.outerHeight()),target.addClass("sticky-nav").removeClass("slide")):"down"===dir&&"down"!==currDir&&(currDir="down",nonSticky())},5)}else nonSticky()}function nonSticky(){body.removeAttr("style"),target.addClass("slide").removeClass("sticky-nav")}trigger(),OnResize(trigger)}});

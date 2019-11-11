@@ -1,0 +1,20 @@
+/* eslint-disable no-magic-numbers, one-var, complexity */
+/* jscs:disable requireVarDeclFirst */
+/**
+ * Dianomi Ads Injection
+ */
+( function( $ ) {
+	'use strict';
+
+	var InvestorsAdvertisingDianomi = {
+		injectTabletAds: function() {
+			$( '#dianomi-thumbnails' ).empty().append( '<iframe width="375" height="1200" scrolling="NO" src="//www.dianomi.com/smartads.epl?id=3509" style="width: 100%; border: none; overflow: hidden;"></iframe>' );
+		},
+		injectDesktopAds: function() {
+			$( '#dianomi-thumbnails' ).empty().append( '<iframe width="729" height="651" scrolling="NO" src="//www.dianomi.com/smartads.epl?id=3512<http://www.dianomi.com/smartads.epl?id=3512>" style="width: 100%; border: none; overflow: hidden;"></iframe>' );
+		}
+	};
+
+	window.InvestorsAdvertising.registerAdType( InvestorsAdvertisingDianomi );
+
+} )( jQuery );

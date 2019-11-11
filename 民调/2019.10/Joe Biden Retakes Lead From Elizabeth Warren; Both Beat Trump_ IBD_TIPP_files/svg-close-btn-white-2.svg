@@ -1,0 +1,20 @@
+<svg width="25" height="25" viewBox="0 0 25 25" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<title>svg-close-btn-white-2</title>
+<desc>Created using Figma</desc>
+<g id="Canvas" transform="translate(784 112)">
+<g id="svg-close-btn-white-2">
+<g id="Close Buttons">
+<g id="Group 4">
+<g id="Group">
+<g id="Exclude">
+<use xlink:href="#path0_fill" transform="translate(-784 -112)" fill="#FFFFFF"/>
+</g>
+</g>
+</g>
+</g>
+</g>
+</g>
+<defs>
+<path id="path0_fill" fill-rule="evenodd" d="M 25 12.5C 25 19.4036 19.4036 25 12.5 25C 5.59644 25 0 19.4036 0 12.5C 0 5.59644 5.59644 0 12.5 0C 19.4036 0 25 5.59644 25 12.5ZM 8.20709 6.79289L 7.5 6.08578L 6.08582 7.5L 6.79291 8.20711L 11.0858 12.5L 6.79291 16.7929L 6.08582 17.5L 7.5 18.9142L 8.20709 18.2071L 12.5 13.9142L 16.7929 18.2071L 17.5 18.9142L 18.9142 17.5L 18.2071 16.7929L 13.9142 12.5L 18.2071 8.20711L 18.9142 7.5L 17.5 6.08578L 16.7929 6.79289L 12.5 11.0858L 8.20709 6.79289Z"/>
+</defs>
+</svg>

@@ -1,0 +1,96 @@
+( function( $ ) {
+	'use strict';
+
+	$( document ).ready( function() {
+
+		// This is for single post view.
+		window.InvestorsUtils.EventsRouting.autoload( {
+			single_partner_perspective: {
+				init: function() { // This is for single post view.
+					injectAdsTargeting( window.InvestorsPartnerPerspectiveSingleData );
+				}
+			}
+		} );
+
+		// This is for Continuous Scroll.
+		window.InvestorsUtils.EventsRouting.register( {
+			single_post: {
+				renew: function( args ) {
+					if ( args.hasOwnProperty( 'post_type' ) && 'partner-perspective' === args.post_type && ! args.is_marked_as_pp ) {
+						injectAdsTargeting( args );
+					}
+				}
+			}
+		} );
+
+		$( document ).on( 'click', '.pp-content-api .button', function( e ) {
+			var element, parentElement, grandParent;
+			e.preventDefault();
+
+			element       = $( this );
+			parentElement = element.parent();
+			grandParent   = parentElement.parent();
+
+			grandParent.css({
+				'height': grandParent.height(),
+				'max-height': 9999
+			}).animate(
+				{
+					'height': grandParent.get( 0 ).scrollHeight
+				},
+				400,
+				function() {
+
+					// The pp article height is changed, we need to re-calculate sticky ad.
+					$( '.adunit.sticky' ).removeClass( 'sticky' ).removeClass( 'absolute' );
+					window.scrollBy( 0, 1 );
+				}
+			);
+			parentElement.fadeOut();
+
+			return false;
+		});
+
+	} );
+
+	function injectAdsTargeting( ppPost ) {
+		var ppEl = $( '.partner-perspective.pp-' + ppPost.post_id ),
+			adAfter,
+			ppAdUnit = ppEl.find( '.pp-sidebar-ad' ),
+			ppCategory = ppPost.category || { 'slug': 'default' },
+			adPageTargeting = {
+				'wordcount': ppPost.word_count,
+				'pid': ppPost.post_name,
+				'ptype': 'partnerperspective'
+			};
+
+		if ( 0 === ppEl.length ) {
+			return;
+		}
+
+		// First Ad Slot of pp article: rec1 with size 300x250,300x600
+		ppAdUnit.data( 'adposition', 'rec1_pp' );
+		ppAdUnit.data( 'page-targeting', adPageTargeting );
+		ppAdUnit.data( 'targeting', {
+			'pp': ppCategory.slug.replace( /[ \-]/g, '' ),
+			'pos': 'rec1' // Override of `data-adposition` for targeting
+		} );
+		ppAdUnit.addClass( 'adunit' );
+
+		// Inject mid1 ad after PP for Continuous Scroll
+		if ( window.InvestorsUtils.isContinuousScrollEnabled() ) {
+			ppEl.after( '<div class="article-between text-center" data-adposition="mid1"></div>' );
+			adAfter = ppEl.next();
+
+			// `mid1` adslot.
+			adAfter.data( 'page-targeting', adPageTargeting );
+
+			// Slot-Level targeting.
+			adAfter.data( 'targeting', {
+				'pp': ppCategory.slug.replace( /[ \-]/g, '' )
+			} );
+			adAfter.addClass( 'adunit' );
+		}
+	}
+
+} )( jQuery );

@@ -1,0 +1,520 @@
+/* global _satellite, console, digitalData, jQuery, jwplayer, IBDVideoShortcode */
+/* eslint-disable no-magic-numbers, complexity */
+/**
+ * IBD Videos.
+ */
+jQuery( document ).ready( function() {
+	'use strict';
+
+	// IBDVideoShortcode:
+	// - postId, current post id
+	// - ajaxUrl, url to admin ajax
+	// - settings, set of video settings
+	// -- embedded_video_float, boolean if the video should be float on page scroll
+
+	// Current behavior, for the first post that is not behind paywall.
+	investorsLoadShortcodeVideo( findContainerEl( IBDVideoShortcode.postId ) );
+
+	// Register for the event when the article is lazy loaded, e.g. by paywall,
+	// continuous scroll.
+	window.InvestorsUtils.EventsRouting.register( {
+		single_post: {
+			renew: function( args ) {
+				if ( 'undefined' !== typeof args && args.hasOwnProperty( 'post_id' ) ) {
+					investorsLoadShortcodeVideo( findContainerEl( args.post_id ) );
+				}
+			}
+		}
+	} );
+
+	/**
+	 * Main function to detect shortcode video in the post and play the video.
+	 * @param {jQuery} postContainerEl Post container element in which the video is embedded.
+	 * @return {void}
+	 */
+	function investorsLoadShortcodeVideo( postContainerEl ) {
+		var basePreferenceURL = 'https://myibd.' + window.envURL + '/Services/JSONPService.asmx/',
+			videoContainerSelector = '.video-player-container',
+
+			// No leading dot or hash, and a video id will be appended,
+			// jwplayer treats this as dom id.
+			playerSelector = 'shortcode-video-player-',
+			videoSelector = '.shortcode-video',
+			component = {};
+
+		/**
+		 * Return early if there is no video player container found on the page.
+		 */
+		if ( 0 === elementInPost( videoContainerSelector ).length ) {
+			return;
+		}
+
+		/**
+		 * Whether the video should start automatically.
+		 *
+		 * @type {boolean|string}
+		 */
+		component.autoStart = 'viewable';
+
+		/**
+		 * Whether the video should be muted
+		 *
+		 * @type {boolean}
+		 */
+		component.mute = true;
+
+		/**
+		 * The API value for a user setting to autostart videos.
+		 *
+		 * When making a request to the API to get the 'autostart' preference,
+		 * This is the value it will return if the preference is to autostart.
+		 *
+		 * @type {number}
+		 */
+		component.autoStartValue = 1;
+
+		/**
+		 * The API value for a user setting to not autostart videos.
+		 *
+		 * @type {number}
+		 */
+		component.nonAutoStartValue = 0;
+
+		/**
+		 * Gets the stored video preference for logged-in users, and plays the video.
+		 *
+		 * Makes a 'GET' request to the API to get a stored preference.
+		 * Then, plays the video.
+		 *
+		 * @return {void}
+		 */
+		component.getPreference = function() {
+			jQuery.ajax(
+				basePreferenceURL + 'GetVideoPreference',
+				{
+					contentType: 'application/json; charset=utf-8',
+					method: 'GET',
+					dataType: 'jsonp',
+					timeout: 5000
+				}
+			).done( function( result ) {
+				if ( 'undefined' !== typeof result.d && component.nonAutoStartValue === parseInt( result.d, 10 ) ) {
+					component.autoStart = false;
+				}
+				startPlayingVideo();
+			} ).fail( function() {
+				startPlayingVideo();
+			} );
+		};
+
+		/**
+		 * Sets the 'autostart' preference for logged-in users.
+		 *
+		 * If a user is logged in, makes a 'POST' request to the API.
+		 * This will store the 'autostart' preference.
+		 *
+		 * @param {boolean} autoStart Whether the preference is to autostart.
+		 * @return {void}
+		 */
+		component.setAutoStartPreference = function( autoStart ) {
+			var preference = autoStart ? component.autoStartValue : component.nonAutoStartValue;
+
+			if ( ! window.InvestorsUtils.Cookie.isUserLoggedIn() ) {
+				return;
+			}
+			jQuery.ajax(
+				basePreferenceURL + 'UpdateVideoPreference',
+				{
+					method: 'POST',
+					contentType: 'application/json; charset=utf-8',
+					dataType: 'jsonp',
+					data: {
+						preference: preference
+					}
+				}
+			);
+		};
+
+		/**
+		 * Gets the autostart preference, and plays the video.
+		 *
+		 * Logged-in users have their preference stored in an API.
+		 * In that case, get the preference and play the video.
+		 * Users that aren't logged in won't have their preference stored.
+		 *
+		 * @return {void}
+		 */
+		component.init = function() {
+			if ( window.InvestorsUtils.Cookie.isUserLoggedIn() ) {
+				component.getPreference();
+			} else {
+				startPlayingVideo();
+			}
+		};
+
+		component.init();
+
+		if ( 'true' === elementInPost( videoSelector ).attr( 'vid-top' ) ) {
+			putVideoOnTop();
+		}
+
+		/**
+		 * Returns the DOM element by selector in the post.
+		 * @param {String} selector Element selector.
+		 * @return {jQuery} jQuery element
+		 */
+		function elementInPost( selector ) {
+			return postContainerEl.find( selector );
+		}
+
+		/**
+		 * Same as elementInPost(), but returns vanilla dom element.
+		 * @param {String} selector Element selector.
+		 * @return {Element} DOM element
+		 */
+		function querySelectorInPost( selector ) {
+			return postContainerEl.find( selector ).get( 0 );
+		}
+
+		/**
+		 * Puts video on top of the article.
+		 * @return {void}
+		 */
+		function putVideoOnTop() {
+			var videoElement = querySelectorInPost( videoContainerSelector );
+
+			elementInPost( videoContainerSelector ).remove();
+			elementInPost( 'header h1' ).after( videoElement );
+		}
+
+		/**
+		 * Loads the shortcode video and conditionally autostarts.
+		 *
+		 * @return {void}
+		 */
+		function startPlayingVideo() {
+
+			var videoElement = elementInPost( videoSelector );
+
+			if ( 0 === videoElement.length ) {
+				return;
+			}
+
+			videoElement.each( function( i, el ) {
+				setupEachVideo( jQuery( el ), i );
+			} );
+		}
+
+		function setupEachVideo( videoElement, i ) {
+			var videoTitle, videoURL, videoCaptions, videoCat, videoDate, vidId, vidDomId, vidImage, vidAuthors,
+				video25sent = false, video50sent = false, video75sent = false,
+				video25 = 0.25, video50 = 0.5, video75 = 0.75,
+				playerInstance, adObject, adUrl,
+				tracks; // Video captions tracks.
+
+			videoTitle = videoElement.attr( 'vid-name' );
+			videoURL = videoElement.attr( 'vid-url' );
+			videoCaptions = videoElement.data( 'captions' );
+			videoCat = videoElement.attr( 'vid-cat' );
+			videoDate = videoElement.attr( 'vid-date' );
+			vidId = videoElement.attr( 'vid-id' );
+			vidDomId = videoElement.attr( 'vid-dom-id' );
+			vidImage = videoElement.attr( 'vid-image' );
+			vidAuthors = videoElement.attr( 'vid-authors' );
+			playerInstance = jwplayer( playerSelector + vidDomId );
+			adUrl = window.GenerateVideoAdUrl && window.GenerateVideoAdUrl( vidId, videoCat );
+
+			// Race conditions may happen between article loading (including paywall)
+			// and continuous scroll, when the video is being rendered, and its article
+			// is already in view, DTM should be update immediately.
+			if ( 'undefined' !== typeof digitalData && 'undefined' === typeof adUpgrade && isPostInView() ) {
+				digitalData.videoName = videoTitle + ' - Embedded Video';
+				digitalData.videoCategory = videoCat;
+				digitalData.videoPublishDate = videoDate;
+				digitalData.videoAuthors = vidAuthors;
+			}
+
+			adObject = {
+				client: 'googima',
+				tag: adUrl
+			};
+
+			if ( ! playerInstance.hasOwnProperty( 'setup' ) ) {
+				return;
+			}
+
+			// Add video closed captions if available.
+			tracks = prepareCaptions( videoCaptions );
+
+			playerInstance.setup( {
+				file: videoURL,
+				tracks: tracks,
+				width: '100%',
+				aspectratio: '16:9',
+				skin: 'bekle',
+				advertising: adObject,
+				autostart: 0 === i ? component.autoStart : false, // Only auto-starts the first video in the post.
+				mute: component.mute,
+				image: vidImage,
+				visualplaylist: false,
+				repeat: 'false'
+			} ).on( 'play', function( event ) {
+				if ( 'undefined' !== typeof playerInstance.getConfig().duration ) {
+					digitalData.videoLength = Math.round( playerInstance.getConfig().duration );
+				}
+				if ( 'undefined' !== event && 'paused' === event.oldstate ) {
+					_satellite.track( 'resumeplay' );
+				}
+				window.videosClickable = true;
+				component.setAutoStartPreference( true );
+			} ).on( 'firstFrame', function() {
+				video25sent = false;
+				video50sent = false;
+				video75sent = false;
+
+				try {
+					_satellite.track( 'videostart' );
+				} catch ( d ) {
+					console.log( 'DTM Error' );
+				}
+
+			} ).on( 'ready', function() {
+				var playerContainer = elementInPost( videoContainerSelector ),
+					playerContainerEl = querySelectorInPost( videoContainerSelector ),
+					videoEl = querySelectorInPost( videoSelector ),
+					playerOffsetTop = getElementOffsetTop( playerContainerEl ),
+					settings = IBDVideoShortcode.settings;
+
+				if ( playerContainer.is( ':hidden' ) ) {
+					playerContainer.css( { 'display': 'inline-block' } );
+				}
+
+				// Fire event for other plugin to interact with video settings.
+				window.InvestorsUtils.EventsRouting.fireAll( 'single_post', 'video_settings', settings );
+
+				if ( settings.embedded_video_float ) {
+					jQuery( document ).on( 'click', '.close-mini-vid', function() {
+						jQuery( '.player-minimize' ).addClass( 'revert-minivid' );
+					} );
+
+					listenScroll();
+				}
+
+				/**
+				 * Listens to the scroll event to float the video.
+				 * @return {void}
+				 */
+				function listenScroll() {
+					var isScrollTimeout = false,
+						timeout = 80,
+						videoScrollHandler = function() { // Scroll handler for showing floating mini video.
+
+							// Turn off when CS is enabled.
+							if ( window.InvestorsUtils.isContinuousScrollEnabled() ) {
+								jQuery( window ).off( 'scroll', videoScrollHandler );
+								jQuery( '.close-mini-vid' ).trigger( 'click' );
+								return;
+							}
+
+							if ( isScrollTimeout ) {
+								return;
+							}
+
+							isScrollTimeout = true;
+							onScrollViewHandler();
+							setTimeout( function() {
+								isScrollTimeout = false;
+							}, timeout );
+						};
+
+					jQuery( window ).scroll( videoScrollHandler );
+				}
+
+				/**
+				 * Adds the player-minimize class to the player container.
+				 * Is controlled by the current player's position in regards to
+				 * the top of the current browser view.
+				 *
+				 * @return {void}
+				 */
+				function onScrollViewHandler() {
+					var minimize = getScrollTop() >= playerOffsetTop;
+
+					playerInstance.utils.toggleClass( videoEl, 'player-minimize', minimize );
+
+					if ( getScrollTop() <= playerOffsetTop ) {
+						videoElement.removeClass( 'revert-minivid' );
+					}
+
+					playerInstance.resize();
+				}
+
+				/**
+				 * Gets the current top position of the player container.
+				 *
+				 * @param {Element} el Element
+				 * @return {Number} Element offset top
+				 */
+				function getElementOffsetTop( el ) {
+					var boundingClientRect = el.getBoundingClientRect(),
+						bodyEl = document.body,
+						docEl = document.documentElement,
+						scrollTop = window.pageYOffset || docEl.scrollTop || bodyEl.scrollTop,
+						clientTop = docEl.clientTop || bodyEl.clientTop || 0;
+
+					return Math.round( boundingClientRect.top + scrollTop - clientTop );
+				}
+
+				/**
+				 * Returns the current document top position.
+				 *
+				 * @return {Number} Element scroll top
+				 */
+				function getScrollTop() {
+					var docEl = document.documentElement;
+
+					return ( window.pageYOffset || docEl.scrollTop ) - ( docEl.clientTop || 0 );
+				}
+
+			} ).on( 'time', function() {
+
+				try {
+					if ( ! video25sent && playerInstance.getPosition() / playerInstance.getDuration() > video25 ) {
+						video25sent = true;
+
+						_satellite.track( 'video25' );
+					}
+
+					if ( ! video50sent && playerInstance.getPosition() / playerInstance.getDuration() > video50 ) {
+						video50sent = true;
+
+						_satellite.track( 'video50' );
+					}
+					if ( ! video75sent && playerInstance.getPosition() / playerInstance.getDuration() > video75 ) {
+						video75sent = true;
+
+						_satellite.track( 'video75' );
+					}
+				} catch ( d ) {
+					console.log( 'DTM Error: ' + d );
+				}
+
+			} ).on( 'beforeComplete', function( ) {
+
+				var viewTime, pauseUrl, pauseImg;
+
+				try {
+					_satellite.track( 'videocomplete' );
+				} catch ( e ) {
+					console.log( 'DTM Error' );
+				}
+
+				viewTime = playerInstance.getPosition();
+				pauseUrl = jQuery( this ).data( 'vid-end' );
+
+				viewTime = Math.round( viewTime );
+
+				if ( pauseUrl ) {
+					pauseUrl = pauseUrl.replace( '[time]', viewTime );
+					pauseImg = jQuery( '<img id=\"vidpause-pixel\">' );
+					pauseImg.attr( 'src', pauseUrl );
+					pauseImg.appendTo( 'body' );
+				}
+			} ).on( 'mute', function( event ) {
+				if ( 'undefined' !== typeof event && true === event.mute ) {
+					_satellite.track( 'volumemute' );
+				} else {
+					_satellite.track( 'volumeunmuted' );
+					component.setAutoStartPreference( false );
+				}
+			} ).on( 'pause', function() {
+				_satellite.track( 'pause' );
+				component.setAutoStartPreference( false );
+			} ).on( 'adPlay', function() {
+				_satellite.track( 'prerollstart' );
+				component.setAutoStartPreference( true );
+			} ).on( 'adPause', function() {
+				component.setAutoStartPreference( false );
+			} ).on( 'adComplete', function() {
+				_satellite.track( 'prerollend' );
+			} );
+
+		}
+
+		/**
+		 * Checks the article in which the video is embedded is in view.
+		 *
+		 * If continuous scroll is not enabled, then the initial article is always
+		 * considered as in view, else checks the css class added by continuous
+		 * scroll, indicating if the current post is in view.
+		 *
+		 * @return {boolean} True if yes, else false.
+		 */
+		function isPostInView() {
+			return ! window.InvestorsUtils.isContinuousScrollEnabled() ||
+				postContainerEl.parents( '.post-inview-current' ).length > 0;
+		}
+
+		/**
+		 * Sets up video captions, and turns on the captions named as "English"
+		 * by default, or the first captions available if "English" is not found.
+		 *
+		 * @param {Array} captions Available captions.
+		 *
+		 * @return {Array} Jwplayer captions tracks.
+		 */
+		function prepareCaptions( captions ) {
+			var tracks = [],
+				hasDefault = false; // Has default captions track.
+
+			// No captions available, turn it off.
+			if ( ! captions || 0 === captions.length ) {
+				return tracks;
+			}
+
+			jQuery.each( captions, function( idx, cap ) {
+				var capName = jQuery.trim( cap.name ),
+					capUrl = jQuery.trim( cap.url ),
+					isEnglish = 'english' === capName.toLowerCase(),
+					isDefault = ! hasDefault && isEnglish; // Take the first English captions as default captions.
+
+				tracks.push( {
+					label: capName,
+					file: capUrl,
+					kind: 'captions',
+					'default': isDefault
+				} );
+
+				if ( isDefault ) {
+					hasDefault = true;
+				}
+			} );
+
+			// Take the first captions as default captions if no English captions found.
+			if ( ! hasDefault ) {
+				tracks[ 0 ][ 'default' ] = true;
+			}
+
+			return tracks;
+		}
+
+	}
+
+	/**
+	 * Finds the container element for shortcode video.
+	 *
+	 * @param {int} postId Post ID.
+	 * @return {jQuery} jQuery element.
+	 */
+	function findContainerEl( postId ) {
+		var el = jQuery( '.post-' + postId ); // Default post specified selector.
+
+		if ( el.length > 0 ) {
+			return el;
+		}
+
+		// Any page or post type may be supported.
+		return jQuery( 'body' );
+	}
+
+} );

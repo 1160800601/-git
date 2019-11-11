@@ -1,0 +1,116 @@
+window.InvestorsMoatApi = ( function( $ ) {
+	'use strict';
+
+	var moatApi, readyCallback,
+		debug = '1' === window.InvestorsMoatSettings.debug_mode,
+		debugEl; // Element where the debug message is shown.
+
+	/**
+	 * Callback when MOAT API for continuous scroll is ready, called by MOAT.
+	 * @param {object} api MOAT API.
+	 * @return {void}
+	 */
+	window.onMISReady = function( api ) {
+		moatApi = api;
+		_log( 'MOAT ready' );
+		_call( readyCallback );
+	};
+
+	if ( debug ) {
+		_enableDebugMode();
+	}
+
+	/**
+	 * Registers a callback when moat api is ready.
+	 * @param {Function} callback Callback function.
+	 * @return {void}
+	 */
+	function ready( callback ) {
+		if ( moatApi ) {
+			_call( callback );
+		} else {
+			readyCallback = callback;
+		}
+	}
+
+	/**
+	 * MOAT track.
+	 * @param {Element} element DOM element or css selector of the article.
+	 * @param {string} title Article title.
+	 * @return {void}
+	 */
+	function track( element, title ) {
+		_log( 'MOAT TRACK: ' + title );
+
+		if ( ! moatApi ) {
+			return;
+		}
+
+		moatApi.track( element, {
+
+			// `resumeTracking` – boolean – This controls the behavior when an
+			// article that has already been viewed is returned to. If true, then
+			// the page view is “resumed”. If false, a new page view will be triggered.
+			resumeTracking: true,
+
+			// `levels` – Array – An array of levels for the page view.
+			// Our content tag tracks level 1 as domain, level 2 as title and level 3 as URL.
+			levels: [
+				window.location.hostname,
+				title,
+				'__page__' // This exact string should be passed in. It is a macro that will be replaced with the URL of the page.
+			]
+		} );
+	}
+
+	/**
+	 * Calls the function.
+	 *
+	 * @param {Function} callback Callback function.
+	 * @return {void}
+	 * @private
+	 */
+	function _call( callback ) {
+		if ( 'function' === typeof callback ) {
+			callback.call();
+		}
+	}
+
+	/**
+	 * Enables debug mode, which shows a debug screen, and simulates
+	 * window.onMISReady call.
+	 * @return {void}
+	 * @private
+	 */
+	function _enableDebugMode() {
+		$( document ).ready( function() {
+			var screenEl = $(
+				'<div style="position: fixed; right: 0; bottom: 0; width: 50%; background: #00000088; color: white; z-index: 99;">' +
+				'<div>MOAT DEBUG MODE</div>' +
+				'<div id="moat-debug"></div>' +
+				'</div>'
+			);
+			$( 'body' ).append( screenEl );
+			debugEl = screenEl.find( '#moat-debug' );
+			window.onMISReady.call();
+		} );
+	}
+
+	/**
+	 * Prints message on the debug screen.
+	 * @param {string} message Message.
+	 * @return {void}
+	 * @private
+	 */
+	function _log( message ) {
+		if ( debug ) {
+			debugEl.text( message );
+		}
+	}
+
+	return {
+		ready: ready,
+		track: track
+	};
+
+} )( jQuery );

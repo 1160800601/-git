@@ -1,0 +1,141 @@
+@font-face{ font-family:"FranklinITCProBold"; font-weight: normal; font-style: normal;
+  src:url("/fonts/Franklin-WebType/Franklin-ITC-Pro-Bold/e9e4c4dc-e548-4fef-9aa1-80c9cd0f02ce-2.eot");
+  src:url("/fonts/Franklin-WebType/Franklin-ITC-Pro-Bold/e9e4c4dc-e548-4fef-9aa1-80c9cd0f02ce-2.eot?") format("embedded-opentype"),
+  url("https://games-cdn.washingtonpost.com/fonts/Franklin-ITC-Pro-Bold.woff") format("woff"),
+  url("/fonts/Franklin-WebType/Franklin-ITC-Pro-Bold/e9e4c4dc-e548-4fef-9aa1-80c9cd0f02ce-1.ttf") format("truetype"),
+  url("/fonts/Franklin-WebType/Franklin-ITC-Pro-Bold/e9e4c4dc-e548-4fef-9aa1-80c9cd0f02ce-4.svg#web") format("svg"); font-style:normal; font-weight:normal}
+
+@font-face{font-family:"FranklinITCProLight"; font-weight: normal; font-style: normal;
+  src:url("/fonts/Franklin-WebType/Franklin-ITC-Pro-Light/b147bee6-eb48-46e1-86e1-2538a46794b6-2.eot");
+  src:url("/fonts/Franklin-WebType/Franklin-ITC-Pro-Light/b147bee6-eb48-46e1-86e1-2538a46794b6-2.eot?") format("embedded-opentype"),
+  url("https://games-cdn.washingtonpost.com/fonts/Franklin-ITC-Pro-Light.woff") format("woff"),
+  url("/fonts/Franklin-WebType/Franklin-ITC-Pro-Light/b147bee6-eb48-46e1-86e1-2538a46794b6-1.ttf") format("truetype"),
+  url("/fonts/Franklin-WebType/Franklin-ITC-Pro-Light/b147bee6-eb48-46e1-86e1-2538a46794b6-4.svg#web") format("svg");font-style:normal;font-weight:normal}
+
+@font-face{font-family:"FranklinITCProThin";src:url("https://www.washingtonpost.com/pb/resources/assets/fonts/webtype/Franklin-ITC-Pro-Thin/56bcaf21-92ef-486a-836d-19f261762e57-2.eot");src:url("https://www.washingtonpost.com/pb/resources/assets/fonts/webtype/Franklin-ITC-Pro-Thin/56bcaf21-92ef-486a-836d-19f261762e57-2.eot?") format("embedded-opentype"),url("https://www.washingtonpost.com/pb/resources/assets/fonts/webtype/Franklin-ITC-Pro-Thin/56bcaf21-92ef-486a-836d-19f261762e57-3.woff") format("woff"),url("https://www.washingtonpost.com/pb/resources/assets/fonts/webtype/Franklin-ITC-Pro-Thin/56bcaf21-92ef-486a-836d-19f261762e57-1.ttf") format("truetype"),url("https://www.washingtonpost.com/pb/resources/assets/fonts/webtype/Franklin-ITC-Pro-Thin/56bcaf21-92ef-486a-836d-19f261762e57-4.svg#web") format("svg");font-style:normal;font-weight:normal}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  margin: 0;
+  padding: 0;
+}
+
+.context-note {
+  max-width: 100%;
+}
+
+.context-header {
+  padding: 15px;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.context-body {
+  position: relative;
+  padding: 15px;
+}
+
+@media only screen and (max-device-width: 768px) {
+  .context-pdf-fallback a::before {
+    content: "\A";
+    white-space: pre;
+  }
+
+  .context-note .context-header {
+    padding: 8px;
+  }
+
+  .context-note .context-body {
+    padding: 0;
+  }
+}
+
+.context-block.framed .context-header {
+  padding-top: 0;
+}
+
+.context-header .note-context {
+  font-size: 16px;
+  font-weight: bold;
+  line-height: 22px;
+  color: #333333;
+  margin-bottom: 10px;
+}
+
+.context-header .note-title {
+  font-family: "FranklinITCProLight","Helvetica Neue Light","Helvetica Neue",Helvetica,Roboto,Arial,sans-serif;
+  color: #333333;
+  font-size: 22px;
+  font-weight: 400;
+  line-height: 30px;
+  margin-bottom: 10px;
+  margin-top: 0;
+}
+
+.context-header .note-byline {
+  font-family: "FranklinITCProLight","Helvetica Neue Light","Helvetica Neue",Helvetica,Roboto,Arial,sans-serif;
+  color: #333333;
+  font-size: 14px;
+  font-weight: 300;
+  line-height: 19px;
+  margin: 0;
+}
+
+.context-header .note-timestamp {
+  font-family: "FranklinITCProLight","Helvetica Neue Light","Helvetica Neue",Helvetica,Roboto,Arial,sans-serif;
+  color: #777777;
+  font-size: 14px;
+  font-weight: 300;
+  line-height: 19px;
+  margin: 0;
+}
+
+.context-block {
+  font-family: "FranklinITCProLight","Helvetica Neue Light","Helvetica Neue",Helvetica,Roboto,Arial,sans-serif;
+  font-size: 20px;
+  color: #111;
+  width: 100%;
+  position: relative;
+  padding: 4px;
+}
+
+.context-block p {
+  font-family: "FranklinITCProLight","Helvetica Neue Light","Helvetica Neue",Helvetica,Roboto,Arial,sans-serif;
+  font-size: 20px;
+  font-weight: 300;
+  line-height: 28px;
+  text-shadow: 0 1px 0 #FFF;
+  margin-bottom: 18px;
+}
+
+.context-block a {
+  border-bottom: 1px solid #d5d5d5;
+  color: #1955a5;
+  text-decoration: none;
+}
+
+.context-block .note-text-light {
+  color: #777777;
+  font-family: 'FranklinITCProLight', sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 19px;
+  margin-bottom: 20px;
+}
+
+.context-block .note-image {
+  max-width: 100%;
+}
+
+.context-image-credit {
+  color: #6E6E6E;
+  font-size: 16px;
+  font-weight: 300;
+  line-height: 20px;
+  padding-top: 4px;
+  padding-bottom: 10px;
+}
+
+.tearsheet.ta-placeholder {
+  padding: 30px 10px;
+}

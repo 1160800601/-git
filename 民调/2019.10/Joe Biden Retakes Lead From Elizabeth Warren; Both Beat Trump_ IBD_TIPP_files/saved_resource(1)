@@ -1,0 +1,13 @@
+
+var sitewideAdObject = {
+    refreshRate : '180',
+    welcomeAdCloseTimer: '12000',
+    welcomeAdPageCounter: '7',
+    welcomeAdExpiration:  '1',
+    welcomeAdCloseButtonTimer:  '2000',
+    lazyLoadOnOff:  'On',
+    browserDetectOnOff:  'On',
+    broadcastMessage: '&lt;p&gt;&lt;!--span style=&quot;color: #000000; font-size: 12pt;&quot;&gt;Investors.com will undergo scheduled maintenance tonight from 10:00 PM to 2:00 AM ET and some features may be unavailable.&lt;/span--&gt;&lt;br /&gt;\n&lt;a href=&quot;https://shop.investors.com/offer/splashresponsive.aspx?id=IBD-Live&amp;intcode=icmhpbrdcstmsg|cms|ibdlive|2019|11|ibdlive|na|707596&amp;src=A00387A&quot; target=&quot;_blank&quot; rel=&quot;noopener&quot;&gt;&lt;iframe style=&quot;border: 0; margin: 0;&quot; src=&quot;https://shop.investors.com/images/promotional/shop/Broadcast/_2019/IBDLive/index.html&quot; width=&quot;100%&quot; height=&quot;80&quot; align=&quot;middle&quot;&gt;&lt;/iframe&gt;&lt;/a&gt;&lt;/p&gt;\n',
+    broadcastMessageStart: '1573023600',
+    broadcastMessageEnd: '1573419000'
+};

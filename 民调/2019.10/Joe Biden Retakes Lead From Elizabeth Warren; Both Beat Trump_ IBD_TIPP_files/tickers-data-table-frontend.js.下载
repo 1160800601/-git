@@ -1,0 +1,182 @@
+/* global jQuery */
+/* eslint-disable no-magic-numbers */
+( function( $ ) {
+	'use strict';
+
+	var searchTickersAPI = 'https://myibd.' + window.envURL + '/searchapi/SymbolList/';
+
+	window.InvestorsTickersDataTable = {
+
+		tableList: [],
+
+		/**
+		 * Bootstrap.
+		 *
+		 * @param {object} tableConfig The config data passed from backend.
+		 * @return {void}
+		 */
+		init: function( tableConfig ) {
+			var i;
+			this.tableList[ tableConfig.identifier ] = tableConfig;
+
+			// Standardlize the tickers' symbols to UPPER case.
+			for ( i in tableConfig.tickers ) {
+				tableConfig.tickers[i].symbol = tableConfig.tickers[i].symbol.trim().toUpperCase();
+			}
+
+			this.pullTickersQuote( tableConfig );
+		},
+		/**
+		 * Search ES for posts
+		 *
+		 * @param {object} tableConfig Config passed from shortcode.
+		 * @return {void}
+		 */
+		pullTickersQuote: function( tableConfig ) {
+			var t = [],	self = this, i;
+
+			for ( i in tableConfig.tickers ) {
+				t.push( tableConfig.tickers[i].symbol );
+			}
+
+			$.ajax( {
+				type: 'GET',
+				url: searchTickersAPI + t.join( ',' ),
+				data: [],
+				crossOrigin: true,
+				dataType: 'json',
+				success: function( result ) {
+					self.render( tableConfig, result );
+				}
+			} );
+
+		},
+		/**
+		 * Fill tickers' name according to the config / retrieved data.
+		 *
+		 * @param {object} originTickers Configured tickers data.
+		 * @param {object} pulledTickers API pulled tickers data.
+		 * @return {object} Tickers object.
+		 */
+		fillTickersName: function( originTickers, pulledTickers ) {
+			var tickersConfig = {}, i, symbol;
+			for ( i in originTickers ) {
+				tickersConfig[ originTickers[i].symbol ] = originTickers[i].name;
+			}
+
+			// Override Ticker Name
+			for ( i in pulledTickers ) {
+				symbol = pulledTickers[i].Symbol.toUpperCase();
+				if ( tickersConfig.hasOwnProperty( symbol ) && tickersConfig[ symbol ].length > 0 ) {
+					pulledTickers[i].CompanyName = tickersConfig[ symbol ];
+				}
+			}
+			return pulledTickers;
+		},
+		/**
+		 * Sort tickers table.
+		 *
+		 * @param {object} tickers Tickers Data.
+		 * @param {string} order Order config 'desc' or 'asc'.
+		 * @return {object} Tickers object.
+		 */
+		sortList: function( tickers, order ) {
+			tickers.sort( function( a, b ) {
+				return a.PricePercentChange - b.PricePercentChange;
+			} );
+
+			if ( 'desc' === order ) {
+				tickers.reverse();
+			}
+			return tickers;
+		},
+		/**
+		 * Render table.
+		 *
+		 * @param {object} tableConfig Table config data.
+     	 * @param {object} tickers Pulled tickers data.
+		 * @return {void}
+		 */
+		render: function( tableConfig, tickers ) {
+			var tableBlock = $( '#investors-tickers-data-table-' + tableConfig.identifier ),
+				titleBlock = '<div class="title">' + tableConfig.title + '</div>',
+				tickersBlock = '',
+				sponsorBlock = '',
+				disclaimerBlock = '',
+				i;
+
+			this.fillTickersName( tableConfig.tickers, tickers );
+			this.sortList( tickers, tableConfig.order );
+
+			tickersBlock = '<div class="table">';
+			for ( i in tickers ) {
+				tickersBlock += '<div class="row">';
+				tickersBlock += '<div class="col col-name">' + tickers[i].CompanyName + '</div>';
+				tickersBlock += '<div class="col col-ticker">';
+				tickersBlock += '<a class="ticker" target="_blank" href="' + tickers[i].QuotePageLink + '" >' + tickers[i].Symbol + '</a>';
+				tickersBlock += '</div>';
+				tickersBlock += '<div class="col col-change">';
+				if ( 0 <= tickers[i].PricePercentChange ) {
+					tickersBlock += '<span class="fi-arrow-up up"></span><span class="value up">' + tickers[i].PricePercentChange + '%</span>';
+				} else {
+					tickersBlock += '<span class="fi-arrow-down down"></span><span class="value down">' + tickers[i].PricePercentChange + '%</span>';
+				}
+				tickersBlock += '</div>';
+				tickersBlock += '</div>';
+
+			}
+			tickersBlock += '</div>';
+
+			// Market status HTML.
+			disclaimerBlock = '<div class="disclaimer">';
+			disclaimerBlock += '<span class="nasdaq-logo"></span>';
+			disclaimerBlock += 'Provided by Nasdaq Last Sale.<br/>';
+			disclaimerBlock += 'Real-time quote and/or trade prices are not sourced from all markets.';
+			disclaimerBlock += '</div>';
+
+			// Sponsor HTML.
+			if ( 'text' === tableConfig.sponsorType ) {
+				sponsorBlock = '<div class="sponsor sponsor-' + tableConfig.sponsorType + '">Sponsored by ' + tableConfig.sponsorContent + '</div>';
+			} else if ( 'image' === tableConfig.sponsorType ) {
+				sponsorBlock = '<div class="sponsor sponsor-' + tableConfig.sponsorType + '">Sponsored by <img src="' + tableConfig.sponsorContent + '"/></div>';
+			}
+			if ( tableConfig.sponsorUrl ) {
+				sponsorBlock = '<a href="' + tableConfig.sponsorUrl + '" target="_blank">' + sponsorBlock + '</a>';
+			}
+
+			// Assemble HTML.
+			tableBlock.html( '' ).append( titleBlock ).append( tickersBlock ).append( sponsorBlock ).append( disclaimerBlock );
+			tableBlock.css( 'display', 'block' );
+			tableBlock.data( 'last-update', Date.parse( new Date() ) / 1000 );
+			tableBlock.data( 'tickers-table-identifier', tableConfig.identifier );
+		}
+	};
+
+	// Detect every 5s to check if data refresh is necessary.
+	setInterval( function() {
+		var hidden;
+
+		// No refresh when page is in background.
+		if ( 'undefined' !== typeof document.hidden  ) {
+			hidden = 'hidden';
+		} else if ( 'undefined' !== typeof document.mozHidden  ) {
+			hidden = 'mozHidden';
+		} else if ( 'undefined' !== typeof document.msHidden  ) {
+			hidden = 'msHidden';
+		} else if ( 'undefined' !== typeof document.webkitHidden ) {
+			hidden = 'webkitHidden';
+		}
+		if ( document[hidden] ) {
+			return;
+		}
+		$( '.investors-tickers-data-table' ).each( function() {
+			var tableIdentifier = $( this ).data( 'tickers-table-identifier' ),
+				tableConfig = window.InvestorsTickersDataTable.tableList[ tableIdentifier ],
+				secondsPassed =  Date.parse( new Date() ) / 1000  - $( this ).data( 'last-update' );
+			if ( window.InvestorsUtils.InViewDetection.isElementInView( $( this ) ) && 60 <= secondsPassed ) {
+				window.InvestorsTickersDataTable.pullTickersQuote( tableConfig );
+			}
+		});
+	}, 5000 );
+
+} )( jQuery );

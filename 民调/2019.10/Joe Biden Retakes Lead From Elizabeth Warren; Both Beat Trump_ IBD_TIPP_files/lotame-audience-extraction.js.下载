@@ -1,0 +1,73 @@
+( function( $ ) {
+	'use strict';
+
+	var cache = window.InvestorsUtils.Cache,
+		data = window.InvestorsLotameAudienceData,
+		secondsInMinute = 60,
+		cachedAudience = cache.get( 'lotame-audience' ),
+		expireSeconds = parseFloat( data.cache_expire_minutes ) * secondsInMinute, // Cache expiration time.
+		script; // Lotame audience extraction script tag.
+
+	if ( expireSeconds > 0 && cachedAudience ) {
+		window.lotameAudience = cachedAudience;
+		$( window ).trigger( 'lotame_audience_ready' );
+	} else {
+		script = document.createElement( 'script' );
+		script.type = 'text/javascript';
+		script.src = getLotameExtractionUrl( data );
+		script.async = true;
+		document.head.appendChild( script );
+	}
+
+	/**
+	 * Callback when lotame audience data is ready.
+	 * @param {object} audience Lotame audience data.
+	 * @return {void}
+	 */
+	window.lotameAudienceCallback = function( audience ) {
+		window.lotameAudience = audience;
+		cache.set( 'lotame-audience', audience, expireSeconds );
+		$( window ).trigger( 'lotame_audience_ready' );
+	};
+
+	/**
+	 * Gets the lotame extraction url with smart tag.
+	 * Implementation taken from Lotame Audience Extraction API doc.
+	 *
+	 * @param {object} settings Lotame settings.
+	 *
+	 * @return {string} Lotame extraction url.
+	 */
+	function getLotameExtractionUrl( settings ) {
+		var pid;
+
+		if ( '1' === settings.enable_smart_tag ) {
+			pid = getSmartTagPid();
+		}
+
+		return 'https://ad.crwdcntrl.net/5/c=' + settings.client_id + '/pe=y/callback=lotameAudienceCallback' + ( pid ? '/pid=' + pid : '' );
+	}
+
+	/**
+	 * Gets the pid for Smart Tag in cookie.
+	 * @return {string} Pid.
+	 */
+	function getSmartTagPid() {
+		var pid,
+			start = document.cookie.indexOf( '_cc_id' ),
+			valStartId, valEndId;
+
+		if ( start > -1 ) {
+			valStartId = document.cookie.indexOf( '=', start );
+			if ( valStartId > 0 ) {
+				valStartId++;
+				valEndId = document.cookie.indexOf( ';', valStartId );
+				valEndId = valEndId > 0 ? valEndId : document.cookie.length;
+				pid = document.cookie.slice( valStartId, valEndId );
+			}
+		}
+
+		return pid;
+	}
+
+} )( jQuery );

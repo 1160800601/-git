@@ -1,0 +1,347 @@
+/* exported dfpAdUnits, dfpLandingMapping, dfpCategoryMapping, dfpArticleMapping */
+/* eslint-disable no-magic-numbers */
+
+var dfpAdUnits = {
+		'video': {
+			leader: {
+				sizes: [
+					[[1024, 0], [[970, 90], [728, 90]]],
+					[[320, 0], []]
+				]
+			}
+		},
+		'home': {
+			breakingnews: {
+				sizes: [
+					[[1024, 0], [[300, 50]]],
+					[[320, 0], []]
+				]
+			},
+			rec1: {
+				sizes: [
+					[[0, 0], [[300, 250]]]
+				]
+			},
+			rec2: {
+				sizes: [
+					[[1024, 0], [[300, 600], [300, 250]]],
+					[[320, 0], [[300, 250]]]
+				]
+			},
+			mid1: {
+				sizes: [
+					[[1024, 0], [[970, 250], [970, 90], [728, 90]]],
+					[[320, 0], []]
+				]
+			},
+			promo: {
+				sizes: [
+					[[1024, 0], [[728, 90]]],
+					[[320, 0], [[300, 65]]]
+				]
+			},
+			skin: {
+				sizes: [
+					[[0, 0], [[1, 1]]]
+				]
+			}
+		},
+		'category-landing': {
+			breakingnews:{
+				sizes: [
+					[[1024, 0], [[300, 50]]],
+					[[320, 0], []]
+				]
+			},
+			sponsorbtn1: {
+				sizes: [
+					[[1024, 0], [[120, 60]]],
+					[[320, 0], []]
+				]
+			},
+			sponsorbtn2: {
+				sizes: [
+					[[1024, 0], [[120, 60]]],
+					[[320, 0], []]
+				]
+			},
+			leader: {
+				sizes: [
+					[[1024, 0], [[970, 90], [728, 90]]],
+					[[320, 0], []]
+				]
+			},
+			rec1: {
+				sizes: [
+					[[0, 0], [[300, 250]]]
+				]
+			},
+			housetop: {
+				sizes: [
+					[[1024, 0], [[300, 130]]],
+					[[320, 0], []]
+				]
+			},
+			rec2: {
+				sizes: [
+					[[1024, 0], [[300, 600], [300, 250]]],
+					[[320, 0], [[300, 250]]]
+				]
+			},
+			tc1: {
+				sizes: [
+					[[1024, 0], [[300, 50]]],
+					[[320, 0], []]
+				]
+			},
+			tc2: {
+				sizes: [
+					[[1024, 0], [[300, 50]]],
+					[[320, 0], []]
+				]
+			},
+			tc3: {
+				sizes: [
+					[[1024, 0], [[300, 50]]],
+					[[320, 0], []]
+				]
+			},
+			tc4: {
+				sizes: [
+					[[1024, 0], [[300, 50]]],
+					[[320, 0], []]
+				]
+			},
+			tc5: {
+				sizes: [
+					[[1024, 0], [[300, 50]]],
+					[[320, 0], []]
+				]
+			},
+			tc6: {
+				sizes: [
+					[[1024, 0], [[300, 50]]],
+					[[320, 0], []]
+				]
+			}
+		},
+		'landing': {
+			breakingnews:{
+				sizes: [
+					[[1024, 0], [[300, 50]]],
+					[[320, 0], []]
+				]
+			},
+			sponsorbtn1: {
+				sizes: [
+					[[1024, 0], [[120, 60]]],
+					[[320, 0], []]
+				]
+			},
+			leader: {
+				sizes: [
+					[[1024, 0], [[970, 90], [728, 90]]],
+					[[320, 0], []]
+				]
+			},
+			rec1: {
+				sizes: [
+					[[0, 0], [[300, 250]]]
+				]
+			},
+			housetop: {
+				sizes: [
+					[[1024, 0], [[300, 130]]],
+					[[320, 0], []]
+				]
+			},
+			rec2: {
+				sizes: [
+					[[1024, 0], [[300, 600], [300, 250]]],
+					[[320, 0], [[300, 250]]]
+				]
+			},
+			tc1: {
+				sizes: [
+					[[1024, 0], [[300, 50]]],
+					[[320, 0], []]
+				]
+			},
+			tc2: {
+				sizes: [
+					[[1024, 0], [[300, 50]]],
+					[[320, 0], []]
+				]
+			},
+			tc3: {
+				sizes: [
+					[[1024, 0], [[300, 50]]],
+					[[320, 0], []]
+				]
+			},
+			tc4: {
+				sizes: [
+					[[1024, 0], [[300, 50]]],
+					[[320, 0], []]
+				]
+			},
+			tc5: {
+				sizes: [
+					[[1024, 0], [[300, 50]]],
+					[[320, 0], []]
+				]
+			},
+			tc6: {
+				sizes: [
+					[[1024, 0], [[300, 50]]],
+					[[320, 0], []]
+				]
+			}
+		},
+		'article': {
+			breakingnews: {
+				sizes: [
+					[[1024, 0], [[300, 50]]],
+					[[320, 0], []]
+				]
+			},
+			sponsorbtn1: {
+				sizes: [
+					[[1024, 0], [[120, 60]]],
+					[[320, 0], []]
+				]
+			},
+			leader: {
+				sizes: [
+					[[1024, 0], [[970, 90], [728, 90]]],
+					[[320, 0], []]
+				]
+			},
+			rec1: {
+				sizes: [
+					[[0, 0], [[300, 250]]]
+				]
+			},
+			'rec1_pp': {
+				sizes: [
+					[[0, 0], [[300, 600], [300, 250]]]
+				]
+			},
+			mid1: {
+				sizes: [
+					[[1024, 0], [[970, 250], [970, 90], [728, 90]]],
+					[[320, 0], []]
+				]
+			},
+			housetop: {
+				sizes: [
+					[[1024, 0], [[300, 130]]],
+					[[320, 0], []]
+				]
+			},
+			rec2: {
+				sizes: [
+					[[1024, 0], [[300, 600], [300, 250]]],
+					[[320, 0], [[300, 250]]]
+				]
+			},
+			rec3: {
+				sizes: [
+					[[1024, 0], [[300, 600], [300, 250]]],
+					[[320, 0], [[300, 250]]]
+				]
+			},
+			tc1: {
+				sizes: [
+					[[1024, 0], [[300, 50]]],
+					[[320, 0], []]
+				]
+			},
+			tc2: {
+				sizes: [
+					[[1024, 0], [[300, 50]]],
+					[[320, 0], []]
+				]
+			},
+			tc3: {
+				sizes: [
+					[[1024, 0], [[300, 50]]],
+					[[320, 0], []]
+				]
+			},
+			tc4: {
+				sizes: [
+					[[1024, 0], [[300, 50]]],
+					[[320, 0], []]
+				]
+			},
+			tc5: {
+				sizes: [
+					[[1024, 0], [[300, 50]]],
+					[[320, 0], []]
+				]
+			},
+			tc6: {
+				sizes: [
+					[[1024, 0], [[300, 50]]],
+					[[320, 0], []]
+				]
+			}
+		},
+		'partnerperspective': {
+			breakingnews: {
+				sizes: [
+					[[1024, 0], [[300, 50]]],
+					[[320, 0], []]
+				]
+			},
+			sponsorbtn1: {
+				sizes: [
+					[[1024, 0], [[120, 60]]],
+					[[320, 0], []]
+				]
+			},
+			leader: {
+				sizes: [
+					[[1024, 0], [[970, 90], [728, 90]]],
+					[[320, 0], []]
+				]
+			},
+			'rec1_pp': {
+				sizes: [
+					[[0, 0], [[300, 600], [300, 250]]]
+				]
+			}
+		}
+	},
+	dfpLandingMapping = {
+		'ibd-data-tables': { s1: 'stocklists',  s2: 'ibddatatables' },
+		'etfs-funds': { s1: 'research', s2: 'etfsfunds' },
+		'futures-options': { s1: 'research', s2: 'futuresoptions' },
+		'news': { s1: 'news' },
+		'technology': { s1: 'news', s2: 'technology' },
+		'special-reports': { s1: 'news', s2: 'specialreports' },
+		'best-etfs': { s1: 'news', s2: 'bestetfs' },
+		'best-mutual-funds': { s1: 'news', s2: 'bestmutualfunds' },
+		'management': { s1: 'news', s2: 'management' },
+		'ibd-videos': { s1: 'videos', s2: 'investingvideos' },
+		'ibd-university': { s1: 'howtoinvest' },
+		'ibd-university/getting-started': { s1: 'howtoinvest', s2: 'gettingstarted' },
+		'ibd-university/market-timing': { s1: 'howtoinvest', s2: 'markettiming' },
+		'ibd-university/chart-reading': { s1: 'howtoinvest', s2: 'chartreading' },
+		'ibd-university/how-to-sell': { s1: 'howtoinvest', s2: 'howtosell' },
+		'ibd-university/can-slim': { s1: 'howtoinvest', s2: 'canslim' },
+		'ibd-university/find-evaluate-stocks': { s1: 'howtoinvest', s2: 'findevaluatestocks' },
+		'ibd-university/how-to-buy': { s1: 'howtoinvest', s2: 'howtobuy' },
+		'ibd-university/swing-trading': { s1: 'howtoinvest', s2: 'swingtrading' }
+	},
+	dfpCategoryMapping = {
+		'politics': 'news',
+		'etfsfunds': 'news'
+	},
+	dfpArticleMapping = {
+		'news/industry-news-and-stocks-to-watch': { s1: 'news', s2: 'industrynewspages' },
+		'etfs-and-funds/mutual-funds/best-mutual-funds-news-performance-reports-investing-ideas': { s1: 'news', s2: 'bestmutualfunds' },
+		'politics/donald-trump-news-tweets-obamacare-immigration-trade-taxes-jobs': { s1: 'news', s2: 'trumpnewstweets' },
+		'news/ibdtipp-americas-most-accurate-pollster': { s1: 'news', s2: 'ibdtipppoll' }
+	};

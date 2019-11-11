@@ -1,0 +1,1408 @@
+/**
+ * Investors Continuous Scroll
+ */
+/* globals postCategories, postID, digitalData, _satellite, PARSELY, jwplayer */
+/* exported InvestorsContinuousScroll */
+/* eslint-disable no-magic-numbers, callback-return, complexity, max-params */
+(function( $ ) {
+	'use strict';
+	var InvestorsContinuousScroll = {
+
+		/**
+		 * Holds data.
+		 */
+		data: {},
+
+		/**
+		 * Grouping Counter
+		 */
+		currentGroup: 1,
+
+		/**
+		 * Current Post
+		 */
+		currentPostPosition: 1,
+
+		/**
+		 * Indicates that if it scrolls to the different group.
+		 */
+		isDifferentGroup: false,
+
+		/**
+		 * Indicates that if it scrolls to the different post.
+		 */
+		isDifferentPost: false,
+
+		/**
+		 * The origin (first) post url.
+		 */
+		originPostUrl: null,
+
+		/**
+		 * The origin (first) page name.
+		 */
+		originPageName: null,
+
+		/**
+		 * Current post element in view.
+		 */
+		currentPostEl: null,
+
+		/**
+		 * Previous post element in view.
+		 */
+		prevPostEl: null,
+
+		/**
+		 * Article amount for in each grouping
+		 */
+		articlesPerGroup: 10,
+
+		/**
+		 * Search API URL
+		 */
+		searchApiUrl: '',
+
+		/**
+		 * ES data for searched posts
+		 */
+		postsFetched: [],
+
+		/**
+		 * Total Count of posts Loaded
+		 */
+		totalPosts: 0,
+
+		/**
+		 * Partner Perspective feature
+		 */
+		partnerPerspective: {
+			enabled: false,
+			queuedPosts: [],
+			pageSize: 1,
+			fetchEnd: false,
+			queryApiUrl: '',
+			lotameAudienceIds: [],
+			fetchedIds: []
+		},
+
+		/**
+		 * Threshold to determine if it's on desktop where the sidebar is shown.
+		 * This width value is taken from function header_resize() in ibd main.js
+		 */
+		desktopThreshold: 1024,
+
+		/**
+		 * The progress bar container.
+		 */
+		progressBarEl: null,
+
+		/**
+		 * Platform Detected
+		 */
+		platform: '',
+
+		/**
+		 * Merges settings and exposes to global.
+		 *
+		 * Vendor may inject script earlier to force enable cs for A/B testing,
+		 * in which case, window.InvestorsContinuousScrollSettings will be set
+		 * in advance, properties that are pre-existing in window.InvestorsContinuousScrollSettings
+		 * will overwrite the properties of the admin settings.
+		 *
+		 * @param {object} originData Original settings data from WP admin.
+		 * @return {void}
+		 */
+		settings: function( originData ) {
+			window.InvestorsContinuousScrollSettings = window.InvestorsContinuousScrollSettings || {};
+
+			// Uses jquery extend function to merge objects, the originData is
+			// modified and is overwritten by window.InvestorsContinuousScrollSettings.
+			$.extend( originData, window.InvestorsContinuousScrollSettings );
+			window.InvestorsContinuousScrollSettings = originData;
+		},
+
+		/**
+		 * Boot plugin.
+		 *
+		 * @param {object} data Includes the settings data for mobile vs desktop.
+		 * @return {void}
+		 */
+		boot: function( data ) {
+			var self = this;
+
+			this.data = data;
+			this.searchApiUrl = 'https://services.' + window.envURL + '/searchapi/searchresults?';
+
+			// Debugging...
+			// Please keep this for easier monitoring on DTM variables.
+			// digitalData = new Proxy( digitalData, {
+			// 	set: function( obj, prop, value ) {
+			// 		console.log( 'dtm', prop + ' = ' +  value );
+			// 		obj[ prop ] = value;
+			// 		return true;
+			// 	}
+			// } );
+
+			// Bootstrap
+			$( document ).ready( function() {
+				var first, // First article container.
+					firstPost, // First article object.
+					parts = [], // Variable for calculate post name.
+					wordcount = 0,
+					tags = '',
+					tickers = '';
+
+				self.platform = window.InvestorsUtils.checkAgent();
+
+				// Return values from checkAgent match keys from inline script for data object.
+				if ( ! self.data[ self.platform ] ) {
+					return;
+				}
+
+				self.originPostUrl = location.href;
+
+				// Add continuous-scroll and platform-aware classes to indicate that
+				// continuous scroll is enabled.
+				$( 'body' ).addClass( 'continuous-scroll' ).addClass( self.platform );
+
+				// Interact with video settings, to disable the mini floating video
+				// when scrolling.
+				window.InvestorsUtils.EventsRouting.register( {
+					single_post: {
+						video_settings: function( settings ) {
+							settings.embedded_video_float = false;
+						}
+					}
+				} );
+
+				// Remove those are not needed for continuous scroll.
+				$( '.related-news' ).remove(); // Related news.
+				$( '.page-sidebar .more-news' ).remove(); // More news in sidebar.
+				$( '.page-sidebar .trading-center-wrapper' ).remove(); // Trading center in sidebar.
+				$( '.marketing-bottom' ).remove(); // Dianomi.
+
+				// Add first article into search result
+				first = $( '.main.row' ).first();
+				first.addClass( 'article-row' );
+				first.addClass( 'pos-1' );
+				first.addClass( 'group-1' );
+				first.addClass( 'post-inview-current' );
+				first.data( 'position', 1 );
+				first.data( 'ptype', 'article' );
+				first.data( 'group', 1 );
+				self.postsFetched[ 0 ] = [];
+				firstPost = {
+					Id: postID,
+					Url: window.location.href,
+					Title: first.find( 'h1' ).text().trim()
+				};
+
+				// Remember these variables, to be reset when scrolling back to the first article.
+				if ( 'undefined' !== typeof digitalData ) {
+					firstPost.Date = digitalData.articleDate;
+					firstPost.Authors = digitalData.authorName;
+					firstPost.Tags = digitalData.tags;
+					firstPost.SubSection1 = digitalData.subSection1;
+					firstPost.SubSection2 = digitalData.subSection2;
+					firstPost.SubSection3 = digitalData.subSection3;
+
+					self.originPageName = digitalData.pageName;
+				}
+				self.postsFetched[ 0 ].push( firstPost );
+
+				self.initMoat( first );
+				self.initPartnerPerspective();
+
+				if ( 'mobile' !== self.platform ) {
+
+					// The first article's postname is fetched from browser.
+					parts = window.location.href.split( '/' );
+
+					// The first article's wordcount is fetched from page global: InvestorsPostMetaData.
+					if ( 'undefined' !== window.InvestorsPostMetaData ) {
+						wordcount = window.InvestorsPostMetaData.word_count;
+						tags = _.pluck( window.InvestorsPostMetaData.tags, 'name' ).join( ',' );
+						tickers = window.InvestorsPostMetaData.prim_tickers;
+					}
+					self.assembleSidebar( 1, 1, parts[ parts.length - 2 ], { pid: parts[ parts.length - 2 ], wordcount: wordcount, tag: tags, ticker: tickers } );
+				}
+
+				self.insertLazyPlaceholder( 1, 1 );
+
+				// Register Event Listeners
+				self.registerListeners();
+
+				// Register in-view event
+				window.InvestorsUtils.InViewDetection.register( 'inview-adunit-between', '.adunit-between-placeholder' );
+				window.InvestorsUtils.InViewDetection.register( 'inview-article', '.article-row' );
+				window.InvestorsUtils.InViewDetection.register( 'inview-sidebar-ad', '.main.row' );
+
+				// Monitor Current Post/PP
+				$( window ).on( 'scroll.inviewlazy resize.inviewlazy lookup.inviewlazy', function() {
+					self.determineCurrentPost( '.main.row' );
+				} );
+
+				/*
+				 * Progress bar will not be part of the scope for the MVP.
+				 * progress bar will be part of phase 2 enhancements for this project.
+				 * Keep progress bar code for future implementation:
+				 * self.setupProgressBar();
+				 */
+
+				// Makes the header sticky for desktop, sticky header for mobile
+				// is already supported in idb main.js.
+				if ( $( window ).width() > self.desktopThreshold ) {
+					self.makeHeaderSticky();
+				}
+				if ( $( window ).width() >= self.desktopThreshold ) {
+					self.alignSidebarHeight( first );
+					self.monitorStickySideAds();
+				}
+
+				// Search data from ES
+				self.searchPosts( 0, 1, false );
+				self.totalPosts = self.articlesPerGroup;
+
+				// Make first story inview.
+				self.currentPostEl = first;
+				$( window ).trigger( 'inview-article', $( first ) );
+
+				// Race conditions may happen between article loading (including paywall)
+				// and continuous scroll, make sure DTM is set.
+				self.updateVideoAnalytics( first );
+
+				// Add a class indicating that the post is in-view once and is handled,
+				// some stuff may only need to be handled once.
+				first.addClass( 'post-inview-handled' );
+			} );
+		},
+
+		/**
+		 * Checks if PartnerPerspective Plugin is enabled and init.
+		 * @return {void}
+		 */
+		initPartnerPerspective: function() {
+			var ppData = window.InvestorsPartnerPerspectiveData, self = this;
+
+			// No pp data, pp plugin is not enabled.
+			if ( ! ppData ) {
+				return;
+			}
+
+			this.partnerPerspective.enabled = true;
+			this.partnerPerspective.queryApiUrl = ppData.query_api_url;
+
+			this.collectLotameAudience();
+
+			// In case that lotame audience is not yet ready, add a listener to
+			// update audience data when ready, so next search will have good
+			// audience data.
+			$( window ).on( 'lotame_audience_ready', function() {
+				self.collectLotameAudience();
+			} );
+
+			this.searchPartnerPerspectives( {
+				tags: ppData.tags,
+				tickers: ppData.prim_tickers_ids,
+				categories: ppData.categories
+			} );
+		},
+
+		/**
+		 * Collects lotame audience data.
+		 * @return {void}
+		 */
+		collectLotameAudience: function() {
+			var i;
+			this.partnerPerspective.lotameAudienceIds = this.getEmulatedLotameAudienceIds();
+			if ( 0 === this.partnerPerspective.lotameAudienceIds.length && window.lotameAudience ) {
+				for ( i in window.lotameAudience.Profile.Audiences.Audience ) {
+					this.partnerPerspective.lotameAudienceIds.push( window.lotameAudience.Profile.Audiences.Audience[ i ].id );
+				}
+			}
+		},
+
+		/**
+		 * Gets emulated Lotame audience ids.
+		 * Specify a query key to override audience result from Lotame, values are
+		 * audience id and comma separated, should be used for test purpose only.
+		 *
+		 * @return {array} Lotame audience ids.
+		 */
+		getEmulatedLotameAudienceIds: function() {
+			var ppData = window.InvestorsPartnerPerspectiveData,
+				emulatedAudienceIds,
+				urlParams;
+			if ( ppData.audience_query_key ) {
+				urlParams = new window.URLSearchParams( window.location.search );
+				emulatedAudienceIds = urlParams.get( ppData.audience_query_key );
+			}
+			return emulatedAudienceIds ? emulatedAudienceIds.split( ',' ) : [];
+		},
+
+		/**
+		 * Insert DOM placeholder for next post and ads
+		 *
+		 * @param {integer} group Group of the placeholder
+		 * @param {integer} position Position of the previous article
+		 * @return {void}
+		 */
+		insertLazyPlaceholder: function( group, position ) {
+			var prevElement = $( '.article-row.group-' + group + '.pos-' + position ),
+				newPosition = position + 1;
+
+			// Inject Ads-placeholder after every article
+			this.insertAdPlaceholder( prevElement, group, position );
+			prevElement = prevElement.next();
+
+			// Inject Article
+			this.insertArticlePlaceholder( prevElement, group, newPosition );
+		},
+
+		/**
+		 * Inserts a placeholder for article to be filled.
+		 *
+		 * @param {jQuery} element Element after which the placeholder is inserted.
+		 * @param {int} group Group.
+		 * @param {int} position Position.
+		 * @return {void}
+		 */
+		insertArticlePlaceholder: function( element, group, position ) {
+			element.after(
+				'<div' +
+				'  class="main row post-lazy-placeholder article-row group-' + group + ' pos-' + position + '"' +
+				'  data-group="' + group + '" ' +
+				'  data-position="' + position + '">' +
+				'</div>'
+			);
+		},
+
+		/**
+		 * Inserts a placeholder for ad.
+		 *
+		 * @param {jQuery} element Element after which the placeholder is inserted.
+		 * @param {int} group Group.
+		 * @param {int} position Position.
+		 * @return {void}
+		 */
+		insertAdPlaceholder: function( element, group, position ) {
+			element.after(
+				'<div' +
+				'  class="adunit-between-placeholder"' +
+				'  data-group="' + group + '"' +
+				'  data-position="' + position + '">' +
+				'</div>'
+			);
+		},
+
+		/**
+		 * Determine the position and group of the story/PP user is viewing, and flag
+		 * that if it scrolls to the different group and the different post.
+		 *
+		 * @param {object} elementClass DOM class of article/PP
+		 * @return {object} currentPost
+		 */
+		determineCurrentPost: function( elementClass ) {
+			var postEl,
+				wt = $( window ).scrollTop() + $( 'header.top-bar' ).height(),
+				wh = $( window ).height(),
+				et,
+				eb,
+				curPosition,
+				self = this,
+				curGroup;
+
+			$( elementClass ).each( function( i, element ) {
+				et = $( element ).offset().top;
+				eb = et + $( element ).height();
+
+				// Scroll Down || Scroll Up
+				if ( et >= wt && et <= wt + wh * 0.5 || et <= wt + wh * 0.1 && eb >= wt + wh * 0.5 ) {
+					curPosition = $( element ).data( 'position' );
+					curGroup = $( element ).data( 'group' );
+
+					if ( $( element ).data( 'group' ) === self.currentPostEl.data( 'group' ) &&
+							$( element ).data( 'position' ) === self.currentPostEl.data( 'position' ) &&
+							$( element ).data( 'ptype' ) === self.currentPostEl.data( 'ptype' ) ) {
+						self.isDifferentPost = false;
+						self.isDifferentGroup = false;
+						return false;
+					}
+
+					self.isDifferentPost = true;
+					if ( self.currentGroup !== curGroup ) {
+						self.isDifferentGroup = true;
+						self.currentGroup = curGroup;
+					}
+					if ( self.currentPostPosition !== curPosition ) {
+						self.currentPostPosition = curPosition;
+					}
+
+					if ( self.isDifferentPost ) {
+						self.prevPostEl = self.currentPostEl;
+						self.currentPostEl = $( element );
+					}
+					postEl = $( element );
+					if ( self.isDifferentGroup ) {
+						self.scrolledToDifferentGroup();
+					}
+					self.scrolledToDifferentPost( postEl );
+
+					return false; // Break on each().
+				}
+
+				return true; // Continue on each().
+			} );
+
+			return postEl;
+		},
+
+		/**
+		 * Fetch partner perspective articles.
+		 * @param {object} targeting Taxonomies for pp targeting (tags, tickers, categories).
+		 * @return {void}
+		 */
+		searchPartnerPerspectives: function( targeting )  {
+			var i, self = this;
+			$.get( {
+				url: this.partnerPerspective.queryApiUrl,
+				data: {
+					page: 1,
+					page_size: this.partnerPerspective.pageSize,
+					audiences: this.partnerPerspective.lotameAudienceIds,
+					tags: targeting.tags,
+					tickers: targeting.tickers,
+					categories: targeting.categories,
+					exclude_ids: this.partnerPerspective.fetchedIds
+				}
+			} ).done( function( response ) {
+				for ( i in response ) {
+
+					// Make sure we dont fetch same pp twice.
+					if ( self.partnerPerspective.fetchedIds.indexOf( response[i].post_id ) === -1 ) {
+						self.partnerPerspective.queuedPosts.push( response[i] );
+						self.partnerPerspective.fetchedIds.push( response[i].post_id );
+					}
+				}
+
+				// Number of returned result is less than what's requested, that means
+				// there is no more data for next fetch.
+				if ( response.length < self.partnerPerspective.pageSize ) {
+					self.partnerPerspective.fetchEnd = true;
+				}
+			} );
+		},
+
+		/**
+		 * Fetch data from WP ReST API and display
+		 *
+		 * @param {integer} group Group of the post
+		 * @param {integer} position Position of the post
+		 * @return {void}
+		 */
+		renderPost: function( group, position ) {
+			var post,
+				elementClass,
+				success = false,
+				element,
+				self = this;
+
+			if ( 'undefined' === typeof this.postsFetched[ group - 1 ][ position - 1 ] ) {
+				return;
+			}
+			post = this.postsFetched[ group - 1 ][ position - 1 ];
+			elementClass = '.article-row.pos-' + position + '.group-' + group;
+			element = $( elementClass );
+
+			if ( ! element.hasClass( 'post-lazy-placeholder' ) ) {
+				return;
+			}
+
+			element.removeClass( 'post-lazy-placeholder' );
+
+			// Fetch Article
+			$.get( {
+				url: this.data.posts_api_url + post.Id
+			} ).done( function( response ) {
+				if ( response.error_message ) {
+					element.html( '<h2>' + response.error_message + '</h2>' );
+				} else {
+					element.replaceWith( response.html );
+
+					// Set data for analytics, following naming convention of ES result.
+					post.Authors = response.authors;
+					post.Categories = response.categories;
+					post.Tags = _.pluck( response.tags, 'name' ).join( ',' );
+					post.Date = response.date; // Overwrite date to have same date format.
+					post.SubSection1 = response.subSection1;
+					post.SubSection2 = response.subSection2;
+					post.SubSection3 = response.subSection3;
+					post.PostName   = response.post_name;
+					post.WordCount  = response.word_count;
+					post.Tickers = response.prim_tickers;
+					post.RawMetaData = response;
+
+					success = true;
+
+					// Fetch PP posts.
+					if ( self.partnerPerspective.enabled && ! self.partnerPerspective.fetchEnd ) {
+						self.searchPartnerPerspectives( {
+							tags: _.pluck( response.tags, 'term_id' ),
+							tickers: response.prim_tickers_ids,
+							categories: response.category_ids
+						} );
+					}
+				}
+			} ).error( function() {
+
+				// Went wrong when WP ReST API found no article
+				element.html(
+					'<div class="main-content-column"><section class="stock-market-today">' +
+					'<article>' +
+					'  <header>' +
+					'    <h1 class="header1">' + post.Title + '</h1>' +
+					'  </header>' +
+					'  <div class="post-content post-missing">There\'s issue when loading the article.</div>' +
+					'</article>' +
+					'</section></div>' +
+					'<div class="clearfix"></div>'
+				);
+				element.addClass( 'post post-' + post.Id );
+
+			} ).always( function() {
+				var loadedElement = $( '.article-row' ).last();
+
+				loadedElement.addClass( 'pos-' + position );
+				loadedElement.addClass( 'group-' + group );
+				loadedElement.data( 'position', position );
+				loadedElement.data( 'group', group );
+				loadedElement.data( 'ptype', 'article' );
+
+				if ( success ) {
+					window.InvestorsUtils.EventsRouting.fireAll( 'single_post', 'renew', {
+						selector: elementClass,
+						post_id: post.Id,
+						group: group,
+						position: position,
+						post_name: post.RawMetaData.post_name,
+						tags: post.RawMetaData.tags,
+						prim_tickers: post.RawMetaData.prim_tickers,
+						word_count: post.RawMetaData.word_count
+					} );
+
+					if ( 'mobile' !== self.platform ) {
+						self.assembleSidebar( group, position, post.PostName, { pid: post.PostName, wordcount: post.WordCount, tag: post.Tags, ticker: post.Tickers } );
+					}
+				}
+
+				if ( $( '.article-row.group-' + group ).length < self.postsFetched[ group - 1 ].length ) {
+					self.insertLazyPlaceholder( group, position );
+					self.removeLoadMore();
+				} else {
+					self.insertAdPlaceholder( loadedElement, group, position );
+					self.showLoadMore( loadedElement.next() );
+				}
+			} );
+		},
+
+		/**
+		 * Trigger for display ads between article
+		 *
+		 * @param {object} event Event Object
+		 * @param {object} element Element Object which trigger the event
+		 * @return {void}
+		 */
+		injectAdsBetweenArticles: function( event, element ) {
+			var self = this, ppPost, ppEl, postGroup, postPosition, postObject, postName, postWordCount,
+				mid1 = $( '<div class="article-between adunit text-center" data-adposition="mid1"></div>' );
+
+			window.InvestorsUtils.InViewDetection.ignoreElement( element );
+
+			// Inject partner perspective article very 1.5 article, like (Article, PP, A, A, PP, repeat...)
+			if ( self.partnerPerspective.queuedPosts.length > 0 && ( 1 === $( element ).data( 'position' ) % 3 || 0 === $( element ).data( 'position' ) % 3 ) ) {
+				ppPost = self.partnerPerspective.queuedPosts.shift();
+				ppEl = $( ppPost.html );
+
+				if ( ppPost.is_marked_as_pp ) {
+
+					// "Marked As PP" use the regular sidebar.
+					$( element ).append( ppEl );
+					this.assembleSidebar( null, null, ppPost.post_name, { pid: ppPost.post_name, wordcount: ppPost.word_count, tag: _.pluck( ppPost.tags, 'name' ).join( ',' ), ticker: ppPost.prim_tickers }, true, ppPost.post_id, ppPost.category );
+
+					// Append `mid1` adunit.
+					mid1 = $( '<div class="article-between text-center" data-adposition="mid1"></div>' );
+					mid1.data( 'targeting-category', ppPost.category )
+						.data( 'permalink', ppPost.permalink )
+						.data( 'targeting', {
+							'pid': ppPost.post_name,
+							'wordcount': ppPost.word_count
+						} )
+						.addClass( 'adunit' );
+					$( element ).append( mid1 );
+
+					// For changing the browser's navbar.
+					ppEl.data( 'pp-url', ppPost.url );
+					ppEl.data( 'pp-title', ppPost.title );
+				} else {
+
+					// Adds title and url for changing url when pp article is in view.
+					ppEl.data( 'pp-url', ppPost.url );
+					ppEl.data( 'pp-title', ppPost.title );
+					ppEl.data( 'pp-date', ppPost.date );
+					ppEl.data( 'ptype', 'partner-perspective' );
+					ppEl.data( 'group', $( element ).data( 'group' ) );
+					ppEl.data( 'position', $( element ).data( 'position' ) );
+
+					$( element ).addClass( 'pp-ad' ).append( ppEl );
+
+					// Hide readmore button if pp article height < 1200px.
+					if ( $( element ).find( '.pp-content-api' ).height() < 1200 ) {
+						$( element ).find( '.pp-content-api p' ).remove( '.read-more' );
+					}
+				}
+
+				// Fire to init shortcode (e.g. video).
+				window.InvestorsUtils.EventsRouting.fireAll( 'single_post', 'renew', ppPost );
+
+			} else if ( 'mobile' !== self.platform ) { // Insert article-between `mid1` ad.
+				postPosition = $( element ).data( 'position' );
+				postGroup    = $( element ).data( 'group' );
+
+				postObject = this.postsFetched[ postGroup - 1 ][ postPosition - 1 ];
+				if ( 1 === postGroup && 1 === postPosition ) {
+					postName  = postObject.Url.replace( /\/$/, '' ).split( '/' ).pop();
+					postWordCount = window.InvestorsPostMetaData.word_count;
+				} else {
+					postName = postObject.PostName;
+					postWordCount = postObject.WordCount;
+				}
+
+				mid1.data( 'page-targeting', {
+					'pid': postName,
+					'wordcount': postWordCount
+				});
+
+				$( element ).append( mid1 );
+			}
+		},
+
+		/**
+		 * Register event listeners
+		 *
+		 * @return {void}
+		 */
+		registerListeners: function() {
+			var self = this;
+
+			// Inject ads between articles.
+			$( window ).on( 'inview-adunit-between', function( event, element ) {
+				self.injectAdsBetweenArticles( event, element );
+			});
+
+			// Article In-View, make sure to load next post.
+			$( window ).on( 'inview-article', function( event, element ) {
+				var postEl = $( element ),
+					nextPosition = postEl.data( 'position' ) + 1,
+					group = postEl.data( 'group' ),
+					nextPostEl = $( '.article-row.post-lazy-placeholder.pos-' + nextPosition + '.group-' + group );
+
+				// For smooth loading, prepare the next article data when the previous is in-view
+				if ( nextPostEl.hasClass( 'post-lazy-placeholder' ) ) {
+					self.renderPost( group, nextPosition );
+				}
+			} );
+
+			// Make ad sticky for story/PP.
+			$( window ).on( 'inview-sidebar-ad', function( event, element ) {
+
+				// Make the last ad in the side bar sticky inside the article while
+				// scrolling, for desktop.
+				if ( $( window ).width() >= self.desktopThreshold ) {
+					self.makeSideAdSticky( $( element ) );
+				}
+			} );
+
+		},
+
+		/**
+		 * Handles stuff when scrolled to different group.
+		 * @return {void}
+		 */
+		scrolledToDifferentGroup: function() {
+			/*
+			 * Update progress bar per group.
+			 *
+			 * Progress bar will not be part of the scope for the MVP.
+			 * progress bar will be part of phase 2 enhancements for this project.
+			 * Keep progress bar code for future implementation:
+			 * this.initProgressBar();
+			 */
+		},
+
+		/**
+		 * Handles stuff when scrolled to different post.
+		 * @param {jQuery} postEl Post element.
+		 * @return {void}
+		 */
+		scrolledToDifferentPost: function( postEl ) {
+			var post, // Regular post or PP post.
+				newTitle, newUrl, // Used for changing browser url.
+				isRegularPost = postEl.hasClass( 'article-row' );
+
+			// Do stuff always needed for the post.
+
+			// Adds a class indicating the current in-view post.
+			this.prevPostEl.removeClass( 'post-inview-current' );
+			postEl.addClass( 'post-inview-current' );
+
+			if ( isRegularPost ) { // Regular post is in view.
+				post = this.postsFetched[ this.currentGroup - 1 ][ this.currentPostPosition - 1 ];
+				newTitle = post.Title;
+				newUrl = post.Url.replace( /^http(s)?:\/\/[\w.\-_]+/, '' ); // Remove domain since History API only Work for same domain.
+
+				// Update DTM tracking variables for post.
+				post.articlePosition = 'Position ' + ( ( this.currentGroup - 1 ) * this.articlesPerGroup + this.currentPostPosition );
+				this.updatePostAnalytics( post );
+
+			} else { // PP post is in view.
+				// Indicates that it's in a different article, so the url will
+				// be changed back to previous article when scrolling back.
+				this.currentPostPosition = -1;
+
+				newTitle = postEl.data( 'pp-title' );
+				newUrl = postEl.data( 'pp-url' );
+
+				this.updatePartnerPerspectiveAnalytics( postEl );
+			}
+
+			// Update the browser url to the current post.
+			window.history.replaceState( null, newTitle, newUrl );
+
+			// Pause video in previous post that is not in the view, and update
+			// DTM tracking variables for video.
+			// TODO: pause() is done asynchronously, we have to wait for it to be
+			// actually paused before updating analytics, or the prev video pause
+			// event will occur after the analytics is updated, which resulting in
+			// incorrect analytics data.
+			this.pausePrevVideo();
+			this.updateVideoAnalytics( postEl );
+
+			this.trackMoat( postEl, newTitle );
+
+			/*
+			 * Update progress bar per post.
+			 *
+			 * Progress bar will not be part of the scope for the MVP.
+			 * progress bar will be part of phase 2 enhancements for this project.
+			 * Keep progress bar code for future implementation:
+			 * self.updateProgressBar();
+			 */
+
+			// This class indicates that the post is in-view once and is handled,
+			// do stuff above when always needed, and do stuff below when needed only
+			// once.
+			if ( postEl.hasClass( 'post-inview-handled' ) ) {
+				return;
+			}
+
+			// Do stuff only needed once for the post.
+
+			if ( isRegularPost ) {
+
+				// DTM send track event.
+				this.trackPostAnalytics();
+
+				// Parse.ly page view.
+				this.trackParselyPageView( post );
+
+			} else { // PP in view.
+				_satellite.track( 'partnerPerspectiveAd' );
+			}
+
+			// Add a class indicating that the post is in-view once and is handled,
+			// some stuff may only need to be handled once.
+			postEl.addClass( 'post-inview-handled' );
+		},
+
+		/**
+		 * Pauses video in previous post.
+		 * @return {void}
+		 */
+		pausePrevVideo: function() {
+			if ( ! jwplayer ) {
+				return;
+			}
+
+			this.prevPostEl.find( '.jwplayer' ).each( function() {
+				var player = jwplayer( $( this ).attr( 'id' ) );
+				player.pause();
+
+				// Pause does not work while the beginning ad is loading, the video will
+				// follow jwplayer autoplay setting (play when video is in view), but
+				// ad will not. So add a listener on ad play to pause the ad if it is
+				// not in view.
+				if ( ! $( this ).data( 'cs-ad-play' ) ) { // No duplicated listener.
+					$( this ).data( 'cs-ad-play', true );
+					player.once( 'adPlay', function() {
+						if ( ! player.getViewable() ) {
+							player.pause();
+						}
+					} );
+				}
+			} );
+		},
+
+		/**
+		 * Updates video analytics.
+		 * @param {jQuery} postEl Post element.
+		 * @return {void}
+		 */
+		updateVideoAnalytics: function( postEl ) {
+			var videoEl, // Video element that contains video meta for analytics.
+				player, // Jwplayer instance.
+				videoTitle, videoCat, videoDate, videoAuthors, videoDomId;
+
+			// Either there is no video in the article, or the article is not fully
+			// rendered yet, for latter case, the video analytics will be set when
+			// it's rendered or in view.
+			videoEl = postEl.find( '.shortcode-video' );
+			if ( 0 === videoEl.length ) {
+				return;
+			}
+
+			// Standard video meta.
+			if ( 'undefined' !== typeof digitalData && 'undefined' !== typeof _satellite ) {
+				videoTitle = videoEl.attr( 'vid-name' );
+				videoCat = videoEl.attr( 'vid-cat' );
+				videoDate = videoEl.attr( 'vid-date' );
+				videoAuthors = videoEl.attr( 'vid-authors' );
+				digitalData.videoName = videoTitle + ' - Embedded Video';
+				digitalData.videoCategory = videoCat;
+				digitalData.videoPublishDate = videoDate;
+				digitalData.videoAuthors = videoAuthors;
+			}
+
+			// Video length.
+			if ( 'undefined' !== typeof jwplayer && 'undefined' !== typeof digitalData ) {
+				videoDomId = videoEl.attr( 'vid-dom-id' );
+				player = jwplayer( 'shortcode-video-player-' + videoDomId );
+				digitalData.videoLength = Math.round( player.getConfig().duration );
+
+				// Indicates that the video length is not available yet.
+				if ( 0 === digitalData.videoLength ) {
+					digitalData.videoLength = undefined;
+				}
+			}
+		},
+
+		/**
+		 * Updates post analytics.
+		 * @param {object} post Post.
+		 * @return {void}
+		 */
+		updatePostAnalytics: function( post ) {
+			if ( 'undefined' !== typeof digitalData && 'undefined' !== typeof _satellite ) {
+				digitalData.contentType = 'Articles';
+				digitalData.pageName = this.originPageName;
+				digitalData.articleName = post.Title;
+				digitalData.articlePosition = post.articlePosition;
+				digitalData.authorName = post.Authors;
+				digitalData.articleCategory = post.Categories;
+				digitalData.tags = post.Tags;
+				digitalData.articleDate = post.Date;
+				digitalData.subSection1 = post.SubSection1;
+				digitalData.subSection2 = post.SubSection2;
+				digitalData.subSection3 = post.SubSection3;
+				digitalData.scrollNumber = $( window ).scrollTop();
+				digitalData.origScrollURL = post.Url;
+			}
+		},
+
+		/**
+		 * Updates partner perspective analytics.
+		 * @param {jQuery} ppEl PP element.
+		 * @return {void}
+		 */
+		updatePartnerPerspectiveAnalytics: function( ppEl ) {
+			if ( 'undefined' !== typeof digitalData && 'undefined' !== typeof _satellite ) {
+				digitalData.contentType = 'Paid Partner Content';
+				digitalData.pageName = ppEl.data( 'pp-title' );
+				digitalData.articleName = ppEl.data( 'pp-title' );
+				digitalData.articleCategory = 'PaidPartner';
+				digitalData.articlePosition = 'PaidPartner';
+				digitalData.articleDate = ppEl.data( 'pp-date' );
+				digitalData.authorName = 'PaidPartner';
+			}
+		},
+
+		/**
+		 * Sends track event for post analytics.
+		 * @return {void}
+		 */
+		trackPostAnalytics: function() {
+			if ( 'undefined' !== typeof digitalData && 'undefined' !== typeof _satellite ) {
+				_satellite.track( 'infiniteScrollEvent' );
+			}
+		},
+
+		/**
+		 * Tracks parse.ly page view.
+		 * @param {object} post Post.
+		 * @return {void}
+		 */
+		trackParselyPageView: function( post ) {
+			if ( 'undefined' !== typeof PARSELY && 'undefined' !== typeof PARSELY.beacon ) {
+				PARSELY.beacon.trackPageView( {
+					url: post.Url,
+					urlref: this.originPostUrl,
+					js: 1
+				} );
+			}
+		},
+
+		/**
+		 * Init moat api.
+		 * @param {jQuery} postEl Post element.
+		 * @return {void}
+		 */
+		initMoat: function( postEl ) {
+			if ( window.InvestorsMoatApi ) {
+				window.InvestorsMoatApi.ready( function() {
+
+					// Track the first article.
+					window.InvestorsMoatApi.track( postEl[0], postEl.find( 'h1' ).text().trim() );
+				} );
+			}
+		},
+
+		/**
+		 * MOAT track.
+		 * @param {jQuery} postEl Post element.
+		 * @param {string} title Post title.
+		 * @return {void}
+		 */
+		trackMoat: function( postEl, title ) {
+			if ( window.InvestorsMoatApi ) {
+				window.InvestorsMoatApi.track( postEl[0], title );
+			}
+		},
+
+		/**
+		 * Search ES for posts
+		 *
+		 * @param {integer} offset The `no` params of ES API
+		 * @param {group} group The group index
+		 * @param {boolean} clear Whether to clear the `postsFetched[group]`
+		 * @return {void}
+		 */
+		searchPosts: function( offset, group, clear ) {
+			var self = this,
+				i,
+				searchParams = {
+					no: offset,
+					nr: 'AND(Source:WordPress,Section:' + postCategories[ 0 ] + ',Column:' + postCategories[ 1 ] + ',NOT(id:' + postID + '))'
+				};
+
+			$.ajax( {
+				type: 'GET',
+				url: this.searchApiUrl,
+				data: $.param( searchParams ),
+				crossOrigin: true,
+				dataType: 'json',
+				success: function( results ) {
+					if ( 0 === results.Results.length ) {
+						return;
+					}
+					if ( clear ) {
+						self.postsFetched[ group - 1 ] = [];
+					}
+					for ( i in results.Results ) {
+						self.postsFetched[ group - 1 ].push( results.Results[ i ] );
+						if ( self.postsFetched[ group - 1 ].length >= self.articlesPerGroup ) {
+							break;
+						}
+					}
+
+					/*
+					 * Progress bar will not be part of the scope for the MVP.
+					 * progress bar will be part of phase 2 enhancements for this project.
+					 * Keep progress bar code for future implementation:
+					 * self.initProgressBar();
+					 */
+					if ( 1 === group ) { // Render the 2nd post for the first group since the first has been already loaded.
+						self.renderPost( group, 2 );
+					} else {
+						self.renderPost( group, 1 );
+					}
+				}
+			} );
+		},
+
+		/**
+		 * Shows a load more to button to be clicked to load more articles.
+		 * @param {jQuery} element Element after which the load more button will be shown.
+		 * @return {void}
+		 */
+		showLoadMore: function( element ) {
+			var self = this,
+				loadMoreEl = $(
+					'<div class="cs-load-more">' +
+					'  <div class="button button-primary">Load More Articles</div>' +
+					'  <img class="spin" src="/wp-content/themes/ibd/dist/images/spin.gif">' +
+					'</div>'
+				);
+			element.after( loadMoreEl );
+
+			loadMoreEl.click( function() {
+				loadMoreEl.find( '.button' ).hide();
+
+				// If using show(), it will make display as inline-block.
+				loadMoreEl.find( '.spin' ).css( 'display', 'block' );
+
+				self.loadNewGroup();
+			} );
+		},
+
+		/**
+		 * Removes the "load more" button.
+		 * @return {void}
+		 */
+		removeLoadMore: function() {
+			$( '.cs-load-more' ).remove();
+		},
+
+		/**
+		 * Load More News into the new group
+		 * @return {void}
+		 */
+		loadNewGroup: function() {
+			var group = this.postsFetched.length + 1,
+				last = $( '.article-row' ).last();
+
+			this.insertArticlePlaceholder( last, group, 1 );
+
+			// This.totalPosts - 1 to exclude the first article which is not loaded through ES
+			this.searchPosts( this.totalPosts - 1, group, true );
+			this.totalPosts += this.articlesPerGroup;
+		},
+
+		/**
+		 * Clone sidebar into every article.
+		 * @param {int} group Group
+		 * @param {int} position Position
+		 * @param {string} postName Post Name
+		 * @param {object} targeting DFP Targeting Object
+		 * @param {bool} isMarkedAsPp Indicates if this is a "Marked As PP" post
+		 * @param {int} postId Only passed the ID of the post when `isMarkedAsPp` is true
+		 * @param {string} categories The value of `categoryObject.categories`.
+		 * @param {string} permalink The permalink of the post.
+		 * @return {void}
+		 */
+		assembleSidebar: function( group, position, postName, targeting, isMarkedAsPp, postId, categories, permalink ) {
+			var articleRowEl = isMarkedAsPp ? $( '.marked-as-pp-' + postId ) : $( '.article-row.group-' + group + '.pos-' + position ),
+				sidebarEl = articleRowEl.find( '.page-sidebar' ),
+				element = $( '<div class="aside-wrapper tag-page"></div>' ),
+				rec1Wrapper = $( '<div class="ads sidebar-ad rec-one"></div>' ),
+				rec1 = $( '<div class="adunit responsive-rec-one" data-adposition="rec1"></div>' ),
+				todaysHeadlines = $( $( '.aside-wrapper .todays-headlines' )[0].outerHTML ),
+				housetopWrapper = $( '<div class="ads sidebar-ad housetop"></div>' ),
+				housetop = $( '<div class="adunit" data-adposition="housetop" ></div>' ),
+				rec2Wrapper = $( '<div class="ads sidebar-ad rec-two"></div>' ),
+				rec2 = $( '<div class="adunit responsive-rec-two" data-adposition="rec2"></div>' );
+
+			rec1Wrapper.append( rec1 );
+			housetopWrapper.append( housetop );
+			rec2Wrapper.append( rec2 );
+
+			// Override adunit hierarchy.
+			if ( isMarkedAsPp ) {
+				rec1.data( 'permalink', permalink ).data( 'targeting-category', categories );
+				housetop.data( 'permalink', permalink ).data( 'targeting-category', categories );
+				rec2.data( 'permalink', permalink ).data( 'targeting-category', categories );
+			}
+
+			rec1.data( 'targeting', targeting );
+			housetop.data( 'targeting', targeting );
+			rec2.data( 'targeting', targeting );
+
+			element.append( rec1Wrapper );
+			element.append( todaysHeadlines );
+			element.append( housetopWrapper );
+			element.append( rec2Wrapper );
+
+			sidebarEl.html( element );
+			this.alignSidebarHeight( articleRowEl, sidebarEl );
+		},
+
+		/**
+		 * Align the sidebar height to be the height of the article, to ease the
+		 * positioning of the sticky side ad when it reaches the end of the article.
+		 * @param {jQuery} postEl Post element.
+ 		 * @param {jQuery} sidebarEl Sidebar element, optional.
+		 * @return {void}
+		 */
+		alignSidebarHeight: function( postEl, sidebarEl ) {
+			var _sidebarEl = sidebarEl || postEl.find( '.page-sidebar' );
+			_sidebarEl.css( 'min-height', postEl.height() );
+		},
+
+		/**
+		 * Make the last ad in the side bar sticky inside the article while
+		 * scrolling.
+		 * @param {jQuery} postEl Post row element.
+		 * @return {void}
+		 */
+		makeSideAdSticky: function( postEl ) {
+			var stickyAd = postEl.find( '.page-sidebar .ads:not(.trading-center)' ).last(),
+				adUnit, adminBarHeight, navHeight, postOffset, articleBottom,
+				stickyAdOffset, stickyAdTop, stickyAdBottom, windowScrollTop;
+
+			if ( 0 === stickyAd.length ) {
+				return;
+			}
+
+			// Different adunit path.
+			if ( stickyAd.hasClass( 'adunit' ) ) {
+				adUnit = stickyAd;
+			} else {
+				adUnit = stickyAd.find( '.adunit' )[0];
+			}
+
+			// Only for loaded adunit.
+			if ( ! $( adUnit ).hasClass( 'display-block' ) ) {
+				return;
+			}
+
+			adminBarHeight = $( '#wpadminbar' ).height();
+			navHeight = $( '.banner.top-bar' ).outerHeight( true ) + adminBarHeight;
+			postOffset = postEl.offset();
+			articleBottom = postOffset.top + postEl.innerHeight();
+			stickyAdOffset = stickyAd.offset();
+			stickyAdTop = stickyAdOffset.top;
+			stickyAdBottom = stickyAdTop + stickyAd.innerHeight();
+			windowScrollTop = $( window ).scrollTop() + navHeight;
+
+			if ( stickyAd.hasClass( 'sticky' ) ) {
+
+				// Debugging...
+				// window.console.log(
+				// 	'grp: ' + postEl.data( 'group' ) + ' |',
+				// 	'pos: ' + postEl.data( 'position' ) + ' |',
+				// 	'scr: ' + windowScrollTop + ' |',
+				// 	'top: ' + stickyAdTop + ' |',
+				// 	'min: ' + stickyAd.data( 'min-top' ) + ' |',
+				// 	'max: ' + stickyAd.data( 'max-top' )
+				// );
+
+				// Constraint the sticky ad inside the range.
+				if ( stickyAdTop <= stickyAd.data( 'min-top' ) ) {
+					stickyAd.removeClass( 'sticky absolute' );
+					postEl.removeClass( 'sticky-ad-monitor' );
+				} else if ( windowScrollTop < stickyAdTop ) {
+					stickyAd.removeClass( 'absolute' );
+					postEl.addClass( 'sticky-ad-monitor' );
+				} else if ( stickyAdTop >= stickyAd.data( 'max-top' ) ) {
+					this.alignSidebarHeight( postEl );
+					stickyAd.addClass( 'absolute' );
+					postEl.addClass( 'sticky-ad-monitor' );
+				}
+			} else if ( articleBottom > stickyAdBottom && windowScrollTop >= stickyAdTop ) {
+
+				// Store a range that the ad can be sticky.
+				stickyAd.data( 'min-top', Math.round( stickyAdTop ) );
+				stickyAd.data( 'max-top', Math.round( stickyAdTop + articleBottom - stickyAdBottom ) );
+				stickyAd.css( {
+					top: navHeight + 'px',
+					left: stickyAdOffset.left + 'px',
+					width: stickyAd.width() + 'px'
+				} );
+				stickyAd.addClass( 'sticky' );
+				postEl.addClass( 'sticky-ad-monitor' );
+			}
+		},
+
+		/**
+		 * Monitors the sticky ads, make sure they don't exceed post boundary.
+		 * @return {void}
+		 */
+		monitorStickySideAds: function() {
+			var self = this;
+			$( window ).scroll(
+				window.InvestorsUtils.delayedExec( 100, function() {
+					$( '.sticky-ad-monitor' ).each( function() {
+						self.makeSideAdSticky( $( this ) );
+					} );
+				} )
+			);
+		},
+
+		/**
+		 * Makes the header sticky while scrolling.
+		 * @return {void}
+		 */
+		makeHeaderSticky: function() {
+			var navEl = $( 'header.top-bar' ), // Nav bar element.
+				adminBarHeight = $( '#wpadminbar' ).height(),
+				navHeight = navEl.outerHeight( true ), // Full height including margin.
+				navTop = navEl.offset().top - adminBarHeight,
+				navMenuEl = $( '#menu-main-nav-1' ), // Menu element inside the nav bar.
+				navMenuTop = navMenuEl.offset().top - adminBarHeight,
+				navBelowEl = $( '<div class="row nav-placeholder"></div>' ), // A placeholder element to be inserted after nav.
+				logoEl = navEl.find( '.topLogoContainer' ),
+				includeLogo = true, // If the sticky header should include logo.
+				scrollOffset = includeLogo ? navTop : navMenuTop; // How far by scrolling down to trigger sticky header.
+
+			// As the nav bar becomes sticky, all content below will be pushed up
+			// immediately. Add vertical space of the same space taken by the nav
+			// bar so it gives smooth scroll experience.
+			navEl.after( navBelowEl );
+
+			$( window ).scroll( function() {
+				if ( $( window ).scrollTop() >= scrollOffset ) {
+					if ( navEl.hasClass( 'sticky' ) ) {
+						return;
+					}
+
+					// When the admin bar is available, make the nav bar sticky under the
+					// admin bar.
+					navEl.addClass( 'sticky' ).css( 'top', adminBarHeight + 'px' );
+
+					// Hide logo if don't include.
+					if ( ! includeLogo ) {
+						logoEl.hide();
+					}
+
+					navBelowEl.css( 'height', navHeight + 'px' );
+				} else {
+					navEl.removeClass( 'sticky' ).css( 'top', 0 );
+					navBelowEl.css( 'height', 0 );
+					logoEl.show();
+				}
+			} );
+		},
+
+		/**
+		 * Sets up the progress bar.
+		 *
+		 * Progress bar will not be part of the scope for the MVP.
+		 * progress bar will be part of phase 2 enhancements for this project.
+		 * Keep progress bar code for future implementation.
+		 *
+		 * @return {void}
+		 */
+		setupProgressBar: function() {
+			var self = this;
+			this.progressBarEl = $( '.continuous-scroll .cs-progress-bar' );
+
+			$( window ).resize( function() {
+				self.initProgressBar();
+			} );
+		},
+
+		/**
+		 * Init the progress bar for current group.
+		 *
+		 * This removes anything in the progress bar container and draw items by
+		 * the number of fetched posts.
+		 *
+		 * @return {void}
+		 */
+		initProgressBar: function() {
+
+			var self = this,
+				numItems, // Number of items in current group.
+				sumMargin, // Sum of margin-right of the items.
+				itemWidth, // Equal width of each item.
+				itemEl, // Progress bar item element.
+				group = this.currentGroup,
+				i; // Loop var i.
+
+			if ( 'undefined' === typeof this.postsFetched[ group - 1 ] ) {
+				return;
+			}
+
+			numItems = this.postsFetched[ group - 1 ].length;
+			sumMargin = 4 * ( numItems - 1 ) + 1;
+			itemWidth = ( this.progressBarEl.width() - sumMargin ) / numItems;
+
+			this.progressBarEl.empty();
+			for ( i = 1; i <= numItems; i++ ) {
+				itemEl = $( '<span class="cs-progress-bar-item"></span>' );
+				itemEl.css( 'width', itemWidth + 'px' );
+				itemEl.data( 'item', i );
+				if ( i <= this.currentPostPosition ) {
+					itemEl.addClass( 'active' );
+				}
+				itemEl.click( scrollToPost );
+				this.progressBarEl.append( itemEl );
+			}
+
+			function scrollToPost( event ) {
+				var pos = $( event.target ).data( 'item' );
+				self.scrollToPosition( pos );
+			}
+		},
+
+		/**
+		 * Scrolls to the post of the specified position.
+		 * @param {int} pos Position
+		 * @return {void}
+		 */
+		scrollToPosition: function( pos ) {
+			var postEl = $( 'article.group-' + this.currentGroup + '.pos-' + pos ), // Post element in the current group.
+				navEl = $( 'header.top-bar' ); // Nav bar element.
+			$( 'html' ).stop( true ).animate(
+				{ scrollTop: postEl.offset().top - navEl.height() },
+				{
+					duration: 1000,
+					complete: function() {
+
+						// Retry again for 2 cases that affect scroll position change:
+						// - when header just becomes sticky
+						// - when content, as well as ads, is not fully loaded
+						$( 'html' ).animate( {
+							scrollTop: postEl.offset().top - navEl.height()
+						}, 500 );
+					}
+				} );
+		},
+
+		/**
+		 * Updates the progress bar items state by the current post position.
+		 * @return {void}
+		 */
+		updateProgressBar: function() {
+			var self = this;
+			this.progressBarEl.children().each( function( i, el ) {
+				$( el ).removeClass( 'active' );
+				if ( i + 1 <= self.currentPostPosition ) {
+					$( el ).addClass( 'active' );
+				}
+			} );
+		}
+	};
+
+	window.InvestorsContinuousScroll = InvestorsContinuousScroll;
+
+	ensurePostCategories();
+
+	/**
+	 * Checks the global variable postCategory, which declared in advertising
+	 * plugin (investors-advertising.js), which may be blocked by adblocker,
+	 * which will prevent continuous scroll page from running.
+	 *
+	 * @return {void}
+	 */
+	function ensurePostCategories() {
+		if ( window.postCategories ) {
+			return;
+		}
+		if ( window.categoryObject && window.categoryObject.categories ) {
+			window.postCategories = window.categoryObject.categories.replace( /"/g, '' ).split( '\\/' );
+		} else {
+			window.postCategories = [];
+		}
+	}
+
+})( jQuery );
